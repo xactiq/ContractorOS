@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>ContractorOS</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#fff;--bg2:#f9fafb;--bg3:#f3f4f6;
+  --text:#111827;--text2:#6b7280;--text3:#9ca3af;
+  --bdr:rgba(0,0,0,.08);--bdr2:rgba(0,0,0,.15);
+  --r:8px;--r2:12px;
+  --mono:ui-monospace,'Fira Code',monospace;
+  --ib:#eff6ff;--ic:#1d4ed8;
+  --sb:#f0fdf4;--sc:#15803d;
+  --wb:#fffbeb;--wc:#b45309;
+  --db:#fef2f2;--dc:#b91c1c;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#0f172a;--bg2:#1e293b;--bg3:#334155;
+  --text:#f1f5f9;--text2:#94a3b8;--text3:#64748b;
+  --bdr:rgba(255,255,255,.08);--bdr2:rgba(255,255,255,.16);
+  --ib:#1e3a5f;--ic:#93c5fd;
+  --sb:#14532d;--sc:#86efac;
+  --wb:#451a03;--wc:#fcd34d;
+  --db:#450a0a;--dc:#fca5a5;
+}}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:var(--text);background:var(--bg)}
+button{font:inherit;font-size:13px;padding:5px 11px;border-radius:var(--r);border:.5px solid var(--bdr2);background:var(--bg);color:var(--text);cursor:pointer;transition:background .1s}
+button:hover{background:var(--bg2)}
+button:disabled{opacity:.35;cursor:default}
+input,select,textarea{font:inherit;font-size:13px;padding:6px 10px;border-radius:var(--r);border:.5px solid var(--bdr2);background:var(--bg);color:var(--text);width:100%;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--ic);box-shadow:0 0 0 2px rgba(59,130,246,.15)}
+textarea{resize:vertical}
+a{color:var(--ic)}
+.wrap{max-width:900px;margin:0 auto}
+.header{border-bottom:.5px solid var(--bdr);position:sticky;top:0;background:var(--bg);z-index:10}
+.hrow{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem 0}
+.tabs{display:flex;padding:0 1.25rem;overflow-x:auto;-ms-overflow-style:none;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{padding:.5rem .875rem;font-size:12px;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;color:var(--text2);font-weight:400}
+.tab.on{color:var(--text);font-weight:500;border-bottom:2px solid var(--text)}
+.body{padding:1.25rem}
+.row{display:flex;align-items:center;gap:8px;padding:.6rem 0;border-bottom:.5px solid var(--bdr)}
+.metric{background:var(--bg2);border-radius:var(--r);padding:.875rem;flex:1;min-width:0}
+.metrics{display:flex;gap:10px;margin-bottom:1.25rem;flex-wrap:wrap}
+.fc{background:var(--bg2);border-radius:var(--r2);padding:1rem;margin-bottom:1rem;border:.5px solid var(--bdr)}
+.fr{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.fld{flex:1;min-width:120px}
+.fld label{font-size:10px;color:var(--text2);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em}
+.fb{display:flex;gap:6px;align-items:center;margin-bottom:1rem;flex-wrap:wrap}
+.fbtn{font-size:11px;padding:3px 10px}
+.fbtn.on{background:var(--ib);color:var(--ic);border-color:var(--ic)}
+.empty{font-size:13px;color:var(--text3);padding:1.5rem 0;text-align:center}
+.av{width:30px;height:30px;border-radius:50%;background:var(--ib);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:var(--ic);flex-shrink:0}
+.kcol{background:var(--bg2);border-radius:var(--r);padding:8px;min-width:0}
+.kcard{background:var(--bg);border:.5px solid var(--bdr);border-radius:var(--r);padding:8px;margin-bottom:6px}
+.hint{font-size:11px;color:var(--text3);padding-top:6px}
+.loader{display:flex;align-items:center;justify-content:center;height:50vh;color:var(--text2);font-size:13px;gap:8px}
+.errbox{background:var(--db);color:var(--dc);border-radius:var(--r);padding:1rem;margin:1rem}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem}
+@media(max-width:600px){.two-col{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+// ═══════════════════════════════════════════════════════
+//  STEP 1 — paste your values from supabase.com/dashboard
+// ═══════════════════════════════════════════════════════
+const SUPABASE_URL = 'https://qjzaxgfwbevztzqlgbwp.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqemF4Z2Z3YmV2enR6cWxnYndwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MDE5MjYsImV4cCI6MjA5NDA3NzkyNn0.nJrcXdQUwApaViI2-OpJhIWzzN1cs6vUe79pzAX5a2g';
+// ═══════════════════════════════════════════════════════
+
+const db  = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const {useState, useEffect} = React;
+const h   = React.createElement;
+const tod = () => new Date().toISOString().slice(0,10);
+const fmt$= n => '$' + Math.round(Number(n)||0).toLocaleString();
+
+/* ── CSV export ── */
+const dlCSV = (name, rows, cols, lk={}) => {
+  const hdr  = cols.map(c=>c.l).join(',');
+  const body = rows.map(r => cols.map(c => {
+    let v = c.fn ? c.fn(r,lk) : String(r[c.k]||'');
+    v = v.replace(/"/g,'""');
+    return /[,"\n]/.test(v) ? `"${v}"` : v;
+  }).join(','));
+  const blob = new Blob([[hdr,...body].join('\n')], {type:'text/csv'});
+  const a = Object.assign(document.createElement('a'), {href:URL.createObjectURL(blob), download:name+'.csv'});
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+
+/* ── Status colour map ── */
+const ST = {
+  lead:        {b:'var(--bg2)',  c:'var(--text2)'},
+  prospect:    {b:'var(--wb)',   c:'var(--wc)'},
+  active:      {b:'var(--ib)',   c:'var(--ic)'},
+  closed:      {b:'var(--sb)',   c:'var(--sc)'},
+  lost:        {b:'var(--db)',   c:'var(--dc)'},
+  pending:     {b:'var(--wb)',   c:'var(--wc)'},
+  'in progress':{b:'var(--ib)', c:'var(--ic)'},
+  complete:    {b:'var(--sb)',   c:'var(--sc)'},
+  'on hold':   {b:'var(--bg2)', c:'var(--text2)'},
+  draft:       {b:'var(--bg2)', c:'var(--text2)'},
+  sent:        {b:'var(--ib)',   c:'var(--ic)'},
+  approved:    {b:'var(--sb)',   c:'var(--sc)'},
+  declined:    {b:'var(--db)',   c:'var(--dc)'},
+  submitted:   {b:'var(--ib)',   c:'var(--ic)'},
+  'in review': {b:'var(--wb)',   c:'var(--wc)'},
+  denied:      {b:'var(--db)',   c:'var(--dc)'},
+};
+
+/* ── Shared UI bits ── */
+function Badge({s}) {
+  const t = ST[s?.toLowerCase()] || ST.lead;
+  return h('span',{style:{background:t.b,color:t.c,fontSize:'11px',fontWeight:'500',padding:'2px 8px',borderRadius:'var(--r)',textTransform:'capitalize',whiteSpace:'nowrap',cursor:'pointer'}},s);
+}
+function NBadge({l}) {
+  return h('span',{style:{background:'var(--bg2)',color:'var(--text2)',fontSize:'11px',fontWeight:'500',padding:'2px 8px',borderRadius:'var(--r)',whiteSpace:'nowrap'}},l);
+}
+function Metric({label,value,muted}) {
+  return h('div',{className:'metric'},
+    h('div',{style:{fontSize:'11px',color:'var(--text2)',marginBottom:'4px',textTransform:'uppercase',letterSpacing:'.05em'}},label),
+    h('div',{style:{fontSize:'20px',fontWeight:'500',fontFamily:'var(--mono)',color:muted?'var(--text3)':'var(--text)'}},value)
+  );
+}
+function Fld({label,as,options,...p}) {
+  const inp = as==='select'
+    ? h('select',{value:p.value,onChange:p.onChange},
+        (options||[]).map(o=>{const v=typeof o==='string'?o:o.value,l=typeof o==='string'?o:o.label;return h('option',{key:v,value:v},l);}))
+    : as==='ta'
+    ? h('textarea',{rows:2,...p})
+    : h('input',{type:p.type||'text',...p});
+  return h('div',{className:'fld',style:{minWidth:p.mw||'120px'}}, label&&h('label',null,label), inp);
+}
+function XBtn({onClick}){return h('button',{onClick,style:{color:'var(--text3)',padding:'4px',border:'none',background:'none'}},h('i',{className:'ti ti-x','aria-hidden':'true',style:{fontSize:'14px'}}));}
+function ExpBtn({onClick}){return h('button',{onClick,style:{fontSize:'11px',color:'var(--text2)',display:'flex',alignItems:'center',gap:'4px'}},h('i',{className:'ti ti-download','aria-hidden':'true',style:{fontSize:'13px'}}),' CSV');}
+function AddBtn({onClick,label}){return h('button',{onClick,style:{display:'flex',alignItems:'center',gap:'4px',fontSize:'13px'}},h('i',{className:'ti ti-plus','aria-hidden':'true',style:{fontSize:'14px'}}),' '+label);}
+
+/* ════════════════════════════════
+   DASHBOARD
+════════════════════════════════ */
+function Dashboard({data,setTab}) {
+  const {clients,jobs,estimates,supplements} = data;
+  const aJ  = jobs.filter(j=>j.status==='In Progress').length;
+  const oE  = estimates.filter(x=>['Draft','Sent'].includes(x.status)).reduce((s,x)=>s+Number(x.value||0),0);
+  const pS  = supplements.filter(s=>['Submitted','In Review'].includes(s.status)).reduce((t,s)=>t+Number(s.supp_amount||0),0);
+  return h('div',null,
+    h('div',{className:'metrics'},
+      h(Metric,{label:'Active Jobs',value:aJ,muted:aJ===0}),
+      h(Metric,{label:'Open Estimates',value:fmt$(oE),muted:oE===0}),
+      h(Metric,{label:'Pending Supps',value:fmt$(pS),muted:pS===0}),
+      h(Metric,{label:'Clients',value:clients.length,muted:clients.length===0})
+    ),
+    h('div',{className:'two-col'},
+      h('div',null,
+        h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}},
+          h('span',{style:{fontSize:'13px',fontWeight:'500'}},'Recent jobs'),
+          h('button',{onClick:()=>setTab('Jobs'),style:{fontSize:'11px',color:'var(--text2)',border:'none',background:'none'}},'View all →')
+        ),
+        jobs.length===0&&h('div',{style:{fontSize:'12px',color:'var(--text3)',padding:'8px 0'}},'No jobs yet'),
+        jobs.slice(0,5).map(j=>{
+          const cl=clients.find(c=>c.id===j.client_id);
+          return h('div',{key:j.id,className:'row'},
+            h('div',{style:{flex:1,minWidth:0}},
+              h('div',{style:{fontSize:'13px',fontWeight:'500',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},j.title),
+              h('div',{style:{fontSize:'11px',color:'var(--text2)'}},cl?.name||'—')
+            ),
+            h(Badge,{s:j.status})
+          );
+        })
+      ),
+      h('div',null,
+        h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}},
+          h('span',{style:{fontSize:'13px',fontWeight:'500'}},'Recent estimates'),
+          h('button',{onClick:()=>setTab('Estimates'),style:{fontSize:'11px',color:'var(--text2)',border:'none',background:'none'}},'View all →')
+        ),
+        estimates.length===0&&h('div',{style:{fontSize:'12px',color:'var(--text3)',padding:'8px 0'}},'No estimates yet'),
+        estimates.slice(0,4).map(x=>{
+          const cl=clients.find(c=>c.id===x.client_id);
+          return h('div',{key:x.id,className:'row'},
+            h('div',{style:{flex:1,minWidth:0}},
+              h('div',{style:{fontSize:'13px',fontWeight:'500',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},x.title),
+              h('div',{style:{fontSize:'11px',color:'var(--text2)'}},(cl?.name||'—')+' · '+fmt$(x.value))
+            ),
+            h(Badge,{s:x.status})
+          );
+        })
+      )
+    )
+  );
+}
+
+/* ════════════════════════════════
+   PIPELINE
+════════════════════════════════ */
+const CSTG  = ['Lead','Prospect','Active','Closed','Lost'];
+const SCOL  = {Lead:'var(--text2)',Prospect:'var(--wc)',Active:'var(--ic)',Closed:'var(--sc)',Lost:'var(--dc)'};
+
+function Pipeline({data,ops}) {
+  const {clients} = data;
+  const [als,setAls]   = useState(null);
+  const [form,setForm] = useState({name:'',phone:'',type:'Residential'});
+  const f = k => ev => setForm(p=>({...p,[k]:ev.target.value}));
+  const cols = CSTG.map(s=>({stage:s,items:clients.filter(c=>c.stage===s)}));
+  const move = (cl,d) => { const i=CSTG.indexOf(cl.stage),nx=CSTG[i+d]; if(nx) ops.upd('clients',cl.id,{stage:nx}); };
+  const saveLead = async s => {
+    if(!form.name.trim()) return;
+    await ops.ins('clients',{...form,stage:s});
+    setForm({name:'',phone:'',type:'Residential'}); setAls(null);
+  };
+  return h('div',null,
+    h('div',{className:'metrics'},cols.map(col=>h(Metric,{key:col.stage,label:col.stage,value:col.items.length,muted:col.items.length===0}))),
+    h('div',{style:{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'8px'}},
+      cols.map(col=>h('div',{key:col.stage,className:'kcol'},
+        h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}},
+          h('span',{style:{fontSize:'10px',fontWeight:'500',color:SCOL[col.stage],textTransform:'uppercase',letterSpacing:'.04em',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},col.stage),
+          h('button',{onClick:()=>setAls(als===col.stage?null:col.stage),style:{fontSize:'15px',lineHeight:1,color:'var(--text3)',padding:'0 2px',border:'none',background:'none',flexShrink:0}},'+')
+        ),
+        als===col.stage&&h('div',{style:{background:'var(--bg)',border:'.5px solid var(--bdr)',borderRadius:'var(--r)',padding:'8px',marginBottom:'8px'}},
+          h('input',{placeholder:'Name',value:form.name,onChange:f('name'),style:{marginBottom:'4px'}}),
+          h('input',{placeholder:'Phone',value:form.phone,onChange:f('phone'),style:{marginBottom:'6px'}}),
+          h('div',{style:{display:'flex',gap:'4px'}},
+            h('button',{onClick:()=>saveLead(col.stage),style:{fontSize:'11px',flex:1}},'Add'),
+            h('button',{onClick:()=>setAls(null),style:{fontSize:'11px',color:'var(--text2)'}},'✕')
+          )
+        ),
+        col.items.length===0&&h('div',{style:{fontSize:'11px',color:'var(--text3)',textAlign:'center',padding:'12px 0'}},'—'),
+        col.items.map(cl=>h('div',{key:cl.id,className:'kcard'},
+          h('div',{style:{fontSize:'12px',fontWeight:'500',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginBottom:'2px'}},cl.name),
+          h('div',{style:{fontSize:'10px',color:'var(--text2)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginBottom:'6px'}},cl.phone||cl.email||cl.type||'—'),
+          h('div',{style:{display:'flex',justifyContent:'space-between'}},
+            h('button',{onClick:()=>move(cl,-1),disabled:CSTG.indexOf(cl.stage)===0,style:{fontSize:'12px',padding:'2px 6px'}},'←'),
+            h('button',{onClick:()=>move(cl,1),disabled:CSTG.indexOf(cl.stage)===CSTG.length-1,style:{fontSize:'12px',padding:'2px 6px'}},'→')
+          )
+        ))
+      ))
+    ),
+    h('div',{className:'hint'},'← → to move between stages · + to add a lead to any column')
+  );
+}
+
+/* ════════════════════════════════
+   CLIENTS
+════════════════════════════════ */
+const CTYPES = ['Residential','Commercial','Insurance'];
+
+function Clients({data,ops}) {
+  const {clients} = data;
+  const [search,  setSearch]   = useState('');
+  const [adding,  setAdding]   = useState(false);
+  const [expanded,setExpanded] = useState(null);
+  const [form,    setForm]     = useState({name:'',phone:'',email:'',address:'',type:'Residential',stage:'Lead',notes:''});
+  const f = k => ev => setForm(p=>({...p,[k]:ev.target.value}));
+  const filtered = clients.filter(c=>!search||[c.name,c.phone,c.email,c.address].some(v=>v?.toLowerCase().includes(search.toLowerCase())));
+  const save = async () => { if(!form.name.trim()) return; await ops.ins('clients',form); setForm({name:'',phone:'',email:'',address:'',type:'Residential',stage:'Lead',notes:''}); setAdding(false); };
+  const cyc  = cl => { const i=CSTG.indexOf(cl.stage); ops.upd('clients',cl.id,{stage:CSTG[(i+1)%CSTG.length]}); };
+  const exp  = () => dlCSV('clients',clients,[{k:'name',l:'Name'},{k:'phone',l:'Phone'},{k:'email',l:'Email'},{k:'address',l:'Address'},{k:'type',l:'Type'},{k:'stage',l:'Stage'},{k:'notes',l:'Notes'},{k:'created_at',l:'Date'}]);
+  return h('div',null,
+    h('div',{className:'fb'},
+      h('input',{placeholder:'Search clients...',value:search,onChange:ev=>setSearch(ev.target.value),style:{flex:1,width:'auto'}}),
+      h(ExpBtn,{onClick:exp}),
+      h(AddBtn,{onClick:()=>setAdding(!adding),label:'New client'})
+    ),
+    adding&&h('div',{className:'fc'},
+      h('div',{style:{fontSize:'13px',fontWeight:'500',marginBottom:'12px'}},'New client'),
+      h('div',{className:'fr'},h(Fld,{label:'Name',value:form.name,onChange:f('name'),placeholder:'Full name',mw:'160px'}),h(Fld,{label:'Phone',value:form.phone,onChange:f('phone'),placeholder:'(xxx) xxx-xxxx',mw:'130px'}),h(Fld,{label:'Email',value:form.email,onChange:f('email'),placeholder:'email@...',mw:'150px'})),
+      h('div',{className:'fr'},h(Fld,{label:'Address',value:form.address,onChange:f('address'),placeholder:'Street, City TX',mw:'200px'}),h(Fld,{label:'Type',as:'select',value:form.type,onChange:f('type'),options:CTYPES,mw:'130px'}),h(Fld,{label:'Stage',as:'select',value:form.stage,onChange:f('stage'),options:CSTG,mw:'110px'})),
+      h(Fld,{label:'Notes',as:'ta',value:form.notes,onChange:f('notes'),placeholder:'Notes...'}),
+      h('div',{style:{display:'flex',gap:'8px',marginTop:'12px'}},h('button',{onClick:save},'Save client'),h('button',{onClick:()=>setAdding(false),style:{color:'var(--text2)'}},'Cancel'))
+    ),
+    filtered.length===0&&!adding&&h('div',{className:'empty'},search?'No clients match.':'No clients yet.'),
+    filtered.map(c=>h('div',{key:c.id,style:{borderBottom:'.5px solid var(--bdr)'}},
+      h('div',{onClick:()=>setExpanded(expanded===c.id?null:c.id),style:{display:'flex',alignItems:'center',gap:'8px',padding:'.6rem 0',cursor:'pointer'}},
+        h('div',{className:'av'},c.name.slice(0,2).toUpperCase()),
+        h('div',{style:{flex:1,minWidth:0}},
+          h('div',{style:{fontSize:'13px',fontWeight:'500'}},c.name),
+          h('div',{style:{fontSize:'11px',color:'var(--text2)'}},c.phone||c.email||c.address||'—')
+        ),
+        h('span',{onClick:ev=>{ev.stopPropagation();cyc(c);}},h(Badge,{s:c.stage})),
+        h('span',{style:{fontSize:'11px',color:'var(--text3)',marginRight:'4px'}},c.type),
+        h('i',{className:`ti ti-chevron-${expanded===c.id?'up':'down'}`,style:{fontSize:'14px',color:'var(--text3)'},'aria-hidden':'true'})
+      ),
+      expanded===c.id&&h('div',{style:{padding:'.25rem 0 .875rem 38px',fontSize:'12px',color:'var(--text2)'}},
+        h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'4px 16px',marginBottom:'8px'}},
+          c.email&&h('div',null,h('span',{style:{color:'var(--text3)'}},'Email: '),c.email),
+          c.phone&&h('div',null,h('span',{style:{color:'var(--text3)'}},'Phone: '),c.phone),
+          c.address&&h('div',{style:{gridColumn:'1/-1'}},h('span',{style:{color:'var(--text3)'}},'Address: '),c.address),
+          c.notes&&h('div',{style:{gridColumn:'1/-1'}},h('span',{style:{color:'var(--text3)'}},'Notes: '),c.notes)
+        ),
+        h('button',{onClick:()=>ops.del('clients',c.id),style:{fontSize:'11px',color:'var(--dc)'}},h('i',{className:'ti ti-trash','aria-hidden':'true'}),' Remove')
+      )
+    ))
+  );
+}
+
+/* ════════════════════════════════
+   JOBS
+════════════════════════════════ */
+const JSTATS = ['Pending','In Progress','Complete','On Hold'];
+const JTYPES = ['Roofing','Siding','Interior','Demo','Haul','Concrete','General','Other'];
+
+function Jobs({data,ops}) {
+  const {jobs,clients} = data;
+  const [filt,  setFilt]   = useState('All');
+  const [adding,setAdding] = useState(false);
+  const [form,  setForm]   = useState({client_id:'',title:'',type:'Roofing',status:'Pending',value:'',start_date:'',notes:''});
+  const f = k => ev => setForm(p=>({...p,[k]:ev.target.value}));
+  const filtered = jobs.filter(j=>filt==='All'||j.status===filt);
+  const cOpts = [{value:'',label:'— No client —'},...clients.map(c=>({value:c.id,label:c.name}))];
+  const save  = async () => { if(!form.title.trim()) return; await ops.ins('jobs',form); setForm({client_id:'',title:'',type:'Roofing',status:'Pending',value:'',start_date:'',notes:''}); setAdding(false); };
+  const cyc   = j => { const i=JSTATS.indexOf(j.status); ops.upd('jobs',j.id,{status:JSTATS[(i+1)%JSTATS.length]}); };
+  const exp   = () => dlCSV('jobs',jobs,[{k:'title',l:'Title'},{k:'client_id',l:'Client',fn:(r,lk)=>lk.find(c=>c.id===r.client_id)?.name||''},{k:'type',l:'Type'},{k:'status',l:'Status'},{k:'value',l:'Value'},{k:'start_date',l:'Start'},{k:'notes',l:'Notes'},{k:'created_at',l:'Date'}],clients);
+  return h('div',null,
+    h('div',{className:'fb'},
+      ['All',...JSTATS].map(s=>h('button',{key:s,className:'fbtn '+(filt===s?'on':''),onClick:()=>setFilt(s)},s)),
+      h('div',{style:{flex:1}}),h(ExpBtn,{onClick:exp}),h(AddBtn,{onClick:()=>setAdding(!adding),label:'New job'})
+    ),
+    adding&&h('div',{className:'fc'},
+      h('div',{style:{fontSize:'13px',fontWeight:'500',marginBottom:'12px'}},'New job'),
+      h('div',{className:'fr'},h(Fld,{label:'Title',value:form.title,onChange:f('title'),placeholder:'Job description',mw:'180px'}),h(Fld,{label:'Client',as:'select',value:form.client_id,onChange:f('client_id'),options:cOpts,mw:'140px'})),
+      h('div',{className:'fr'},h(Fld,{label:'Type',as:'select',value:form.type,onChange:f('type'),options:JTYPES,mw:'120px'}),h(Fld,{label:'Status',as:'select',value:form.status,onChange:f('status'),options:JSTATS,mw:'120px'}),h(Fld,{label:'Value ($)',type:'number',value:form.value,onChange:f('value'),placeholder:'0',mw:'100px'}),h(Fld,{label:'Start date',type:'date',value:form.start_date,onChange:f('start_date'),mw:'130px'})),
+      h(Fld,{label:'Notes',as:'ta',value:form.notes,onChange:f('notes'),placeholder:'Notes...'}),
+      h('div',{style:{display:'flex',gap:'8px',marginTop:'12px'}},h('button',{onClick:save},'Save job'),h('button',{onClick:()=>setAdding(false),style:{color:'var(--text2)'}},'Cancel'))
+    ),
+    filtered.length===0&&h('div',{className:'empty'},filt!=='All'?'No jobs with this status.':'No jobs yet.'),
+    filtered.map(j=>{
+      const cl=clients.find(c=>c.id===j.client_id);
+      return h('div',{key:j.id,className:'row'},
+        h('div',{style:{flex:1,minWidth:0}},
+          h('div',{style:{fontSize:'13px',fontWeight:'500',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},j.title),
+          h('div',{style:{fontSize:'11px',color:'var(--text2)'}},(cl?.name||'No client')+' · '+j.type+(j.value?' · '+fmt$(j.value):'')+(j.start_date?' · '+j.start_date:''))
+        ),
+        h('span',{onClick:()=>cyc(j),title:'Advance status'},h(Badge,{s:j.status})),
+        h(XBtn,{onClick:()=>ops.del('jobs',j.id)})
+      );
+    }),
+    filtered.length>0&&h('div',{className:'hint'},'Click status badge to advance')
+  );
+}
+
+/* ════════════════════════════════
+   ESTIMATES
+════════════════════════════════ */
+const ESTATS = ['Draft','Sent','Approved','Declined'];
+
+function Estimates({data,ops}) {
+  const {estimates,clients} = data;
+  const [filt,  setFilt]   = useState('All');
+  const [adding,setAdding] = useState(false);
+  const [form,  setForm]   = useState({client_id:'',title:'',value:'',status:'Draft',notes:''});
+  const f = k => ev => setForm(p=>({...p,[k]:ev.target.value}));
+  const filtered = estimates.filter(x=>filt==='All'||x.status===filt);
+  const total    = filtered.reduce((s,x)=>s+Number(x.value||0),0);
+  const cOpts    = [{value:'',label:'— No client —'},...clients.map(c=>({value:c.id,label:c.name}))];
+  const save  = async () => { if(!form.title.trim()) return; await ops.ins('estimates',form); setForm({client_id:'',title:'',value:'',status:'Draft',notes:''}); setAdding(false); };
+  const adv   = x => { const i=ESTATS.indexOf(x.status); if(i<ESTATS.length-1) ops.upd('estimates',x.id,{status:ESTATS[i+1]}); };
+  const exp   = () => dlCSV('estimates',estimates,[{k:'title',l:'Title'},{k:'client_id',l:'Client',fn:(r,lk)=>lk.find(c=>c.id===r.client_id)?.name||''},{k:'value',l:'Value'},{k:'status',l:'Status'},{k:'notes',l:'Notes'},{k:'created_at',l:'Date'}],clients);
+  return h('div',null,
+    h('div',{className:'fb'},
+      ['All',...ESTATS].map(s=>h('button',{key:s,className:'fbtn '+(filt===s?'on':''),onClick:()=>setFilt(s)},s)),
+      h('div',{style:{flex:1}}),h(ExpBtn,{onClick:exp}),h(AddBtn,{onClick:()=>setAdding(!adding),label:'New estimate'})
+    ),
+    filtered.length>0&&h('div',{className:'metrics'},h(Metric,{label:(filt==='All'?'Total':filt)+' value',value:fmt$(total)}),h(Metric,{label:'Count',value:filtered.length})),
+    adding&&h('div',{className:'fc'},
+      h('div',{style:{fontSize:'13px',fontWeight:'500',marginBottom:'12px'}},'New estimate'),
+      h('div',{className:'fr'},h(Fld,{label:'Title',value:form.title,onChange:f('title'),placeholder:'Description',mw:'180px'}),h(Fld,{label:'Client',as:'select',value:form.client_id,onChange:f('client_id'),options:cOpts,mw:'140px'}),h(Fld,{label:'Value ($)',type:'number',value:form.value,onChange:f('value'),placeholder:'0',mw:'100px'}),h(Fld,{label:'Status',as:'select',value:form.status,onChange:f('status'),options:ESTATS,mw:'110px'})),
+      h(Fld,{label:'Notes',as:'ta',value:form.notes,onChange:f('notes'),placeholder:'Notes...'}),
+      h('div',{style:{display:'flex',gap:'8px',marginTop:'12px'}},h('button',{onClick:save},'Save estimate'),h('button',{onClick:()=>setAdding(false),style:{color:'var(--text2)'}},'Cancel'))
+    ),
+    filtered.length===0&&h('div',{className:'empty'},filt!=='All'?'No estimates with this status.':'No estimates yet.'),
+    filtered.map(x=>{
+      const cl=clients.find(c=>c.id===x.client_id);
+      return h('div',{key:x.id,className:'row'},
+        h('div',{style:{flex:1,minWidth:0}},
+          h('div',{style:{fontSize:'13px',fontWeight:'500',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},x.title),
+          h('div',{style:{fontSize:'11px',color:'var(--text2)'}},(cl?.name||'No client')+' · '+fmt$(x.value)+(x.created_at?' · '+x.created_at.slice(0,10):''))
+        ),
+        h('span',{onClick:()=>adv(x),title:'Advance status'},h(Badge,{s:x.status})),
+        h(XBtn,{onClick:()=>ops.del('estimates',x.id)})
+      );
+    }),
+    filtered.length>0&&h('div',{className:'hint'},'Click status badge to advance')
+  );
+}
+
+/* ════════════════════════════════
+   SUPPLEMENTS
+════════════════════════════════ */
+const SSTATS = ['Pending','Submitted','In Review','Approved','Denied'];
+
+function Supplements({data,ops}) {
+  const {supplements,clients} = data;
+  const [filt,  setFilt]   = useState('All');
+  const [adding,setAdding] = useState(false);
+  const [form,  setForm]   = useState({client_id:'',carrier:'',claim_num:'',xacti_amount:'',supp_amount:'',status:'Pending',notes:''});
+  const f = k => ev => setForm(p=>({...p,[k]:ev.target.value}));
+  const filtered = supplements.filter(s=>filt==='All'||s.status===filt);
+  const appd  = supplements.filter(s=>s.status==='Approved').reduce((t,s)=>t+Number(s.supp_amount||0),0);
+  const infl  = supplements.filter(s=>['Submitted','In Review'].includes(s.status)).reduce((t,s)=>t+Number(s.supp_amount||0),0);
+  const cOpts = [{value:'',label:'— No client —'},...clients.map(c=>({value:c.id,label:c.name}))];
+  const save  = async () => { if(!form.carrier.trim()&&!form.claim_num.trim()) return; await ops.ins('supplements',form); setForm({client_id:'',carrier:'',claim_num:'',xacti_amount:'',supp_amount:'',status:'Pending',notes:''}); setAdding(false); };
+  const adv   = s => { const i=SSTATS.indexOf(s.status); if(i<SSTATS.length-1) ops.upd('supplements',s.id,{status:SSTATS[i+1]}); };
+  const exp   = () => dlCSV('supplements',supplements,[{k:'carrier',l:'Carrier'},{k:'claim_num',l:'Claim #'},{k:'client_id',l:'Client',fn:(r,lk)=>lk.find(c=>c.id===r.client_id)?.name||''},{k:'xacti_amount',l:'Xactimate'},{k:'supp_amount',l:'Supplement'},{k:'status',l:'Status'},{k:'notes',l:'Notes'},{k:'created_at',l:'Date'}],clients);
+  return h('div',null,
+    h('div',{className:'fb'},
+      ['All',...SSTATS].map(s=>h('button',{key:s,className:'fbtn '+(filt===s?'on':''),onClick:()=>setFilt(s)},s)),
+      h('div',{style:{flex:1}}),h(ExpBtn,{onClick:exp}),h(AddBtn,{onClick:()=>setAdding(!adding),label:'New supplement'})
+    ),
+    (appd>0||infl>0)&&h('div',{className:'metrics'},h(Metric,{label:'Approved',value:fmt$(appd),muted:appd===0}),h(Metric,{label:'In flight',value:fmt$(infl),muted:infl===0})),
+    adding&&h('div',{className:'fc'},
+      h('div',{style:{fontSize:'13px',fontWeight:'500',marginBottom:'12px'}},'New supplement'),
+      h('div',{className:'fr'},h(Fld,{label:'Client',as:'select',value:form.client_id,onChange:f('client_id'),options:cOpts,mw:'140px'}),h(Fld,{label:'Carrier',value:form.carrier,onChange:f('carrier'),placeholder:'Insurance company',mw:'140px'}),h(Fld,{label:'Claim #',value:form.claim_num,onChange:f('claim_num'),placeholder:'Claim number',mw:'120px'})),
+      h('div',{className:'fr'},h(Fld,{label:'Xactimate ($)',type:'number',value:form.xacti_amount,onChange:f('xacti_amount'),placeholder:'0',mw:'120px'}),h(Fld,{label:'Supplement ($)',type:'number',value:form.supp_amount,onChange:f('supp_amount'),placeholder:'0',mw:'120px'}),h(Fld,{label:'Status',as:'select',value:form.status,onChange:f('status'),options:SSTATS,mw:'120px'})),
+      h(Fld,{label:'Notes',as:'ta',value:form.notes,onChange:f('notes'),placeholder:'Notes...'}),
+      h('div',{style:{display:'flex',gap:'8px',marginTop:'12px'}},h('button',{onClick:save},'Save supplement'),h('button',{onClick:()=>setAdding(false),style:{color:'var(--text2)'}},'Cancel'))
+    ),
+    filtered.length===0&&h('div',{className:'empty'},filt!=='All'?'No supplements with this status.':'No supplements yet.'),
+    filtered.map(s=>{
+      const cl=clients.find(c=>c.id===s.client_id);
+      return h('div',{key:s.id,className:'row'},
+        h('div',{style:{flex:1,minWidth:0}},
+          h('div',{style:{fontSize:'13px',fontWeight:'500',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},s.carrier+(s.claim_num?' · #'+s.claim_num:'')),
+          h('div',{style:{fontSize:'11px',color:'var(--text2)'}},(cl?.name||'No client')+(s.xacti_amount?' · Xacti: '+fmt$(s.xacti_amount):'')+(s.supp_amount?' · Supp: '+fmt$(s.supp_amount):''))
+        ),
+        h('span',{onClick:()=>adv(s),title:'Advance status'},h(Badge,{s:s.status})),
+        h(XBtn,{onClick:()=>ops.del('supplements',s.id)})
+      );
+    }),
+    filtered.length>0&&h('div',{className:'hint'},'Click status badge to advance')
+  );
+}
+
+/* ════════════════════════════════
+   DOCS
+════════════════════════════════ */
+const DTYPES = ['Contract','Scope of Work','Estimate','Invoice','Photo Link','W9','Lien Waiver','Change Order','Other'];
+
+function Docs({data,ops}) {
+  const {docs,clients,jobs} = data;
+  const [adding,setAdding] = useState(false);
+  const [form,  setForm]   = useState({title:'',type:'Contract',client_id:'',job_id:'',url:'',notes:''});
+  const f = k => ev => setForm(p=>({...p,[k]:ev.target.value}));
+  const cOpts = [{value:'',label:'— No client —'},...clients.map(c=>({value:c.id,label:c.name}))];
+  const jOpts = [{value:'',label:'— No job —'},...jobs.map(j=>({value:j.id,label:j.title}))];
+  const save  = async () => { if(!form.title.trim()) return; await ops.ins('docs',form); setForm({title:'',type:'Contract',client_id:'',job_id:'',url:'',notes:''}); setAdding(false); };
+  const exp   = () => dlCSV('docs',docs,[{k:'title',l:'Title'},{k:'type',l:'Type'},{k:'client_id',l:'Client',fn:(r,lk)=>lk.clients?.find(c=>c.id===r.client_id)?.name||''},{k:'job_id',l:'Job',fn:(r,lk)=>lk.jobs?.find(j=>j.id===r.job_id)?.title||''},{k:'url',l:'URL'},{k:'notes',l:'Notes'},{k:'created_at',l:'Date'}],{clients,jobs});
+  return h('div',null,
+    h('div',{className:'fb'},
+      h('span',{style:{flex:1,fontSize:'13px',color:'var(--text2)'}},docs.length+' doc'+(docs.length===1?'':'s')),
+      h(ExpBtn,{onClick:exp}),h(AddBtn,{onClick:()=>setAdding(!adding),label:'Add doc'})
+    ),
+    adding&&h('div',{className:'fc'},
+      h('div',{style:{fontSize:'13px',fontWeight:'500',marginBottom:'12px'}},'Add document'),
+      h('div',{className:'fr'},h(Fld,{label:'Title',value:form.title,onChange:f('title'),placeholder:'Document name',mw:'160px'}),h(Fld,{label:'Type',as:'select',value:form.type,onChange:f('type'),options:DTYPES,mw:'130px'})),
+      h('div',{className:'fr'},h(Fld,{label:'Client',as:'select',value:form.client_id,onChange:f('client_id'),options:cOpts,mw:'140px'}),h(Fld,{label:'Job',as:'select',value:form.job_id,onChange:f('job_id'),options:jOpts,mw:'150px'})),
+      h(Fld,{label:'URL (Google Drive, Dropbox, etc.)',value:form.url,onChange:f('url'),placeholder:'https://...'}),
+      h(Fld,{label:'Notes',as:'ta',value:form.notes,onChange:f('notes'),placeholder:'Notes...'}),
+      h('div',{style:{display:'flex',gap:'8px',marginTop:'12px'}},h('button',{onClick:save},'Save'),h('button',{onClick:()=>setAdding(false),style:{color:'var(--text2)'}},'Cancel'))
+    ),
+    docs.length===0&&!adding&&h('div',{className:'empty'},'No docs yet. Add links to contracts, scopes, invoices, photos, and more.'),
+    docs.map(d=>{
+      const cl  = clients.find(c=>c.id===d.client_id);
+      const job = jobs.find(j=>j.id===d.job_id);
+      return h('div',{key:d.id,className:'row'},
+        h('i',{className:'ti ti-file','aria-hidden':'true',style:{fontSize:'16px',color:'var(--text3)',flexShrink:0}}),
+        h('div',{style:{flex:1,minWidth:0}},
+          h('div',{style:{fontSize:'13px',fontWeight:'500'}},
+            d.url ? h('a',{href:d.url,target:'_blank',rel:'noopener'},d.title) : d.title
+          ),
+          h('div',{style:{fontSize:'11px',color:'var(--text2)'}},[cl?.name,job?.title,d.created_at?.slice(0,10)].filter(Boolean).join(' · '))
+        ),
+        h(NBadge,{l:d.type}),
+        h(XBtn,{onClick:()=>ops.del('docs',d.id)})
+      );
+    })
+  );
+}
+
+/* ════════════════════════════════
+   APP ROOT
+════════════════════════════════ */
+const TABS = ['Dashboard','Pipeline','Clients','Jobs','Estimates','Supplements','Docs'];
+const EMPTY = {clients:[],jobs:[],estimates:[],supplements:[],docs:[]};
+
+function App() {
+  const [tab,     setTab]     = useState('Dashboard');
+  const [data,    setData]    = useState(EMPTY);
+  const [loading, setLoading] = useState(true);
+  const [err,     setErr]     = useState(null);
+
+  const loadAll = async () => {
+    setLoading(true);
+    try {
+      const [c,j,e,s,d] = await Promise.all([
+        db.from('clients').select('*').order('created_at',{ascending:false}),
+        db.from('jobs').select('*').order('created_at',{ascending:false}),
+        db.from('estimates').select('*').order('created_at',{ascending:false}),
+        db.from('supplements').select('*').order('created_at',{ascending:false}),
+        db.from('docs').select('*').order('created_at',{ascending:false}),
+      ]);
+      if(c.error) throw c.error;
+      setData({clients:c.data||[],jobs:j.data||[],estimates:e.data||[],supplements:s.data||[],docs:d.data||[]});
+    } catch(e) {
+      setErr(e.message||'Could not connect to Supabase. Check your URL and key.');
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadAll(); }, []);
+
+  const ins = async (table, record) => { await db.from(table).insert(record); await loadAll(); };
+  const upd = async (table, id, changes) => { await db.from(table).update(changes).eq('id',id); await loadAll(); };
+  const del = async (table, id) => { await db.from(table).delete().eq('id',id); await loadAll(); };
+  const ops = {ins, upd, del};
+
+  if (loading) return h('div',{className:'loader'},h('i',{className:'ti ti-loader-2','aria-hidden':'true',style:{fontSize:'18px'}}),'Loading...');
+  if (err)     return h('div',{className:'wrap'},h('div',{className:'errbox'},'⚠ ',err));
+
+  return h('div',{className:'wrap'},
+    h('div',{className:'header'},
+      h('div',{className:'hrow'},
+        h('span',{style:{fontSize:'14px',fontWeight:'500',letterSpacing:'-.01em'}},'ContractorOS'),
+        h('span',{style:{fontSize:'11px',color:'var(--text3)',fontFamily:'var(--mono)'}},'McEntire Construction · Gustine, TX')
+      ),
+      h('div',{className:'tabs'},TABS.map(t=>h('button',{key:t,className:'tab '+(tab===t?'on':''),onClick:()=>setTab(t)},t)))
+    ),
+    h('div',{className:'body'},
+      tab==='Dashboard'   && h(Dashboard,  {data,setTab}),
+      tab==='Pipeline'    && h(Pipeline,   {data,ops}),
+      tab==='Clients'     && h(Clients,    {data,ops}),
+      tab==='Jobs'        && h(Jobs,       {data,ops}),
+      tab==='Estimates'   && h(Estimates,  {data,ops}),
+      tab==='Supplements' && h(Supplements,{data,ops}),
+      tab==='Docs'        && h(Docs,       {data,ops})
+    )
+  );
+}
+
+ReactDOM.render(h(App), document.getElementById('root'));
+</script>
+</body>
+</html>
