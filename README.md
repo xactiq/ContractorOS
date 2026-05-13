@@ -1,9 +1,9 @@
 # ContractorOS
 
-A sellable white-label contractor operating system for insurance-restoration and general contractors.
+A sellable and customizable contractor operating system for insurance-restoration and general contractors.
 
 ## Goal
-Build a product McEntire can sell to contractors as an operating system instead of doing roof sales.
+Build a product Mr. McEntire can sell to contractors as an operating system instead of doing roof sales. For Estimators and freelancers it can be a portal, basically a CRM for CRMs
 
 ## Product thesis
 Most small contractors run on broken spreadsheets, tribal knowledge, and slow supplement workflows. ContractorOS gives them one system for:
@@ -13,8 +13,8 @@ Most small contractors run on broken spreadsheets, tribal knowledge, and slow su
 - estimating and pricebook management
 - carrier comparison and supplement drafting
 - job execution paperwork
-- invoice, payment, and profit tracking
-- white-label branding
+- proposal, invoice, payment, and profit tracking
+- customizable spaces to insert branding
 
 ## Core product modules
 1. CRM & Pipeline
