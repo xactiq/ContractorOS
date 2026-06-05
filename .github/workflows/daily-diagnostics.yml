@@ -1,16 +1,10 @@
 name: Daily System Diagnostics
 
-# Runs at 6:00 AM CST (12:00 UTC) — adjust to '0 11 * * *' for CDT
+# Runs at 6:00 AM CST (12:00 UTC) — adjust cron to '0 11 * * *' for CDT
 on:
   schedule:
     - cron: '0 12 * * *'
   workflow_dispatch:
-    inputs:
-      verbose:
-        description: 'Show extra debug output'
-        required: false
-        default: 'false'
-        type: boolean
 
 permissions:
   contents: read
@@ -66,13 +60,13 @@ jobs:
               ? JSON.parse(fs.readFileSync('diagnostic-summary.json', 'utf8'))
               : { critical: 1, warnings: 0, passed: 0, major_changes_required: true };
 
-            const date           = new Date().toISOString().split('T')[0];
-            const hasCritical    = summary.critical > 0;
-            const hasWarnings    = summary.warnings > 0;
-            const needsApproval  = summary.major_changes_required;
+            const date          = new Date().toISOString().split('T')[0];
+            const hasCritical   = summary.critical > 0;
+            const hasWarnings   = summary.warnings > 0;
+            const needsApproval = summary.major_changes_required;
 
-            const emoji  = hasCritical ? '🔴' : hasWarnings ? '🟡' : '🟢';
-            const title  = `${emoji} Daily Diagnostic — ${date}`;
+            const emoji = hasCritical ? '🔴' : hasWarnings ? '🟡' : '🟢';
+            const title = `${emoji} Daily Diagnostic — ${date}`;
 
             const labels = ['diagnostic-report'];
             if (hasCritical)   labels.push('critical');
@@ -115,5 +109,5 @@ jobs:
       - name: Fail workflow on critical issues
         if: steps.run_diag.outcome == 'failure'
         run: |
-          echo "::error::Diagnostic script reported critical issues. Check the GitHub issue for details."
+          echo "::error::Critical issues found. Check the GitHub Issue for details."
           exit 1
