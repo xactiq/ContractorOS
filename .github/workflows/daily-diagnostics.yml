@@ -1,0 +1,113 @@
+name: Daily System Diagnostics
+
+# Runs at 6:00 AM CST (12:00 UTC) — adjust cron to '0 11 * * *' for CDT
+on:
+  schedule:
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  diagnostics:
+    name: Full System Diagnostics
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Make diagnostic script executable
+        run: chmod +x .github/scripts/diagnostics.sh
+
+      - name: Run diagnostics
+        id: run_diag
+        run: bash .github/scripts/diagnostics.sh
+        continue-on-error: true
+        env:
+          SITE_URL: https://app.xactiq.net
+
+      - name: Upload diagnostic report artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: diagnostic-report-${{ github.run_number }}
+          path: |
+            diagnostic-report.md
+            diagnostic-summary.json
+          retention-days: 90
+
+      - name: Create or update GitHub issue with report
+        uses: actions/github-script@v7
+        if: always()
+        with:
+          script: |
+            const fs = require('fs');
+
+            const report  = fs.existsSync('diagnostic-report.md')
+              ? fs.readFileSync('diagnostic-report.md', 'utf8')
+              : '⚠️ Diagnostic script failed to produce a report.';
+
+            const summary = fs.existsSync('diagnostic-summary.json')
+              ? JSON.parse(fs.readFileSync('diagnostic-summary.json', 'utf8'))
+              : { critical: 1, warnings: 0, passed: 0, major_changes_required: true };
+
+            const date          = new Date().toISOString().split('T')[0];
+            const hasCritical   = summary.critical > 0;
+            const hasWarnings   = summary.warnings > 0;
+            const needsApproval = summary.major_changes_required;
+
+            const emoji = hasCritical ? '🔴' : hasWarnings ? '🟡' : '🟢';
+            const title = `${emoji} Daily Diagnostic — ${date}`;
+
+            const labels = ['diagnostic-report'];
+            if (hasCritical)   labels.push('critical');
+            if (hasWarnings)   labels.push('needs-review');
+            if (needsApproval) labels.push('owner-approval-required');
+
+            const labelDefs = [
+              { name: 'diagnostic-report',       color: '0075ca', description: 'Automated daily diagnostic report' },
+              { name: 'critical',                color: 'd73a4a', description: 'Critical system issue'            },
+              { name: 'needs-review',            color: 'e4e669', description: 'Needs manual review'              },
+              { name: 'owner-approval-required', color: 'f9c642', description: 'Requires owner approval'         },
+            ];
+            for (const lbl of labelDefs) {
+              try {
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  name: lbl.name, color: lbl.color, description: lbl.description,
+                });
+              } catch (_) {}
+            }
+
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              labels: 'diagnostic-report', state: 'open', per_page: 20,
+            });
+            const todayIssue = existing.data.find(i => i.title.includes(date));
+
+            if (todayIssue) {
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: todayIssue.number, title, body: report, labels,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body: report, labels,
+              });
+            }
+
+      - name: Fail workflow on critical issues
+        if: steps.run_diag.outcome == 'failure'
+        run: |
+          echo "::error::Critical issues found. Check the GitHub Issue for details."
+          exit 1
