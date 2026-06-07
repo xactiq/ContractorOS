@@ -22,7 +22,7 @@ nl()     { echo "" >> "$SECTIONS_FILE"; }
 sec "1. Website Health"
 append "## 1. Website Health — \`${SITE_URL}\`"; nl
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "$SITE_URL" 2>/dev/null || echo "000")
-RESP_TIME=$(curl -s -o /dev/null -w "%.3f" --max-time 20 "$SITE_URL" 2>/dev/null || echo "N/A")
+RESP_TIME=$(curl -s -o /dev/null -w "%{time_total}" --max-time 20 "$SITE_URL" 2>/dev/null || echo "N/A")
 if [ "$HTTP_CODE" = "200" ]; then
     pass "Site is UP — HTTP $HTTP_CODE (${RESP_TIME}s)"
     append "- **Status:** ✅ HTTP 200 OK"
@@ -58,7 +58,7 @@ append "|---|---|---|"
 check_cdn() {
     local name="$1" url="$2" code time
     code=$(curl -s -o /dev/null -w "%{http_code}" -L --max-time 15 "$url" 2>/dev/null || echo "000")
-    time=$(curl -s -o /dev/null -w "%.3f" -L --max-time 15 "$url" 2>/dev/null || echo "N/A")
+    time=$(curl -s -o /dev/null -w "%{time_total}" -L --max-time 15 "$url" 2>/dev/null || echo "N/A")
     if [[ "$code" =~ ^[23] ]]; then pass "CDN: $name — $code"; append "| $name | ✅ HTTP $code | ${time}s |"
     else fail "CDN down: $name ($code)"; append "| $name | ❌ HTTP $code | — |"
         MAJOR_CHANGES="${MAJOR_CHANGES}\n- **CDN Failure:** $name unreachable (HTTP $code). App will fail to load."; fi
@@ -80,6 +80,8 @@ else
     SUPA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${SUPA_URL}/rest/v1/" -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" 2>/dev/null || echo "000")
     if [[ "$SUPA_STATUS" =~ ^2 ]] || [ "$SUPA_STATUS" = "404" ]; then
         pass "Supabase reachable (HTTP $SUPA_STATUS)"; append "- **REST API:** ✅ Reachable"
+    elif [ "$SUPA_STATUS" = "401" ]; then
+        warn "Supabase REST: HTTP 401 — anon key rejected; verify the API key is active in Supabase dashboard"; append "- **REST API:** ⚠️ HTTP 401 (auth issue — not critical)"
     else fail "Supabase HTTP $SUPA_STATUS"; append "- **REST API:** ❌ HTTP $SUPA_STATUS"; fi
     nl; append "### Database Growth Tracking"; nl
     append "| Table | Record Count |"; append "|---|---|"
