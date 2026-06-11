@@ -88,7 +88,7 @@ const fmt$= n => '$' + Math.round(Number(n)||0).toLocaleString();
 const dlCSV = (name, rows, cols, lk={}) => {
   const hdr  = cols.map(c=>c.l).join(',');
   const body = rows.map(r => cols.map(c => {
-    let v = c.fn ? c.fn(r,lk) : String(r[c.k]||'');
+    let v = c.fn ? c.fn(r,lk) : String(r[c.k]??'');
     v = v.replace(/"/g,'""');
     return /[,"\n]/.test(v) ? `"${v}"` : v;
   }).join(','));
