@@ -77,11 +77,14 @@ if [ -z "$SUPA_URL" ]; then
     warn "Could not extract Supabase URL"; append "- **Config:** ⚠️ Supabase URL not found in index.html"
 else
     append "- **Project URL:** \`$SUPA_URL\`"
-    SUPA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${SUPA_URL}/rest/v1/" -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" 2>/dev/null || echo "000")
-    if [[ "$SUPA_STATUS" =~ ^2 ]] || [ "$SUPA_STATUS" = "404" ]; then
+    # Query a real table instead of the bare /rest/v1/ root — PostgREST returns
+    # 401 for the root OpenAPI spec under some configs even when the anon key
+    # is perfectly valid for normal table queries.
+    SUPA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${SUPA_URL}/rest/v1/clients?select=id&limit=1" -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" 2>/dev/null || echo "000")
+    if [[ "$SUPA_STATUS" =~ ^2 ]]; then
         pass "Supabase reachable (HTTP $SUPA_STATUS)"; append "- **REST API:** ✅ Reachable"
-    elif [ "$SUPA_STATUS" = "401" ]; then
-        warn "Supabase REST: HTTP 401 — anon key rejected; verify the API key is active in Supabase dashboard"; append "- **REST API:** ⚠️ HTTP 401 (auth issue — not critical)"
+    elif [ "$SUPA_STATUS" = "401" ] || [ "$SUPA_STATUS" = "403" ]; then
+        warn "Supabase REST: HTTP $SUPA_STATUS — anon key rejected; verify the API key is active in Supabase dashboard"; append "- **REST API:** ⚠️ HTTP $SUPA_STATUS (auth issue)"
     else fail "Supabase HTTP $SUPA_STATUS"; append "- **REST API:** ❌ HTTP $SUPA_STATUS"; fi
     nl; append "### Database Growth Tracking"; nl
     append "| Table | Record Count |"; append "|---|---|"
@@ -141,8 +144,8 @@ grep -qi "service_role" index.html 2>/dev/null \
     || { pass "No service_role in HTML"; append "- **Service Role Key:** ✅ Not exposed"; }
 if [ -f schema.sql ]; then
     if   grep -qi "DISABLE ROW LEVEL SECURITY" schema.sql 2>/dev/null; then
-        warn "RLS disabled"; append "- **RLS:** ⚠️ Explicitly DISABLED — all data open to anon key"
-        RECOMMENDATIONS="${RECOMMENDATIONS}\n- Enable RLS before multi-tenant launch."
+        warn "RLS disabled in schema.sql (reference file)"; append "- **RLS:** ⚠️ \`schema.sql\` reference file disables RLS — confirm the *live* Supabase project has RLS enabled on every table (check via Supabase dashboard/advisors); update this file if it no longer matches production."
+        RECOMMENDATIONS="${RECOMMENDATIONS}\n- schema.sql still says RLS is disabled — verify live DB RLS status and update schema.sql if it's stale."
     elif grep -qi "ENABLE ROW LEVEL SECURITY"  schema.sql 2>/dev/null; then
         pass "RLS enabled"; append "- **RLS:** ✅ Enabled"
     else warn "No RLS config"; append "- **RLS:** ⚠️ Not configured"; fi
@@ -157,7 +160,8 @@ nl
 
 sec "6. UI Integrity"
 append "## 6. UI Component Integrity"; nl
-ONCLICK_COUNT=$(grep -c "onClick=" index.html 2>/dev/null) || ONCLICK_COUNT=0
+# Match both JSX (`onClick=`) and hyperscript/h() (`onClick:`) call styles
+ONCLICK_COUNT=$(grep -cE "onClick[=:]" index.html 2>/dev/null) || ONCLICK_COUNT=0
 append "- **onClick handlers:** $ONCLICK_COUNT"
 FORM_COUNT=$(grep -cE "const save\s*=|onSubmit|handleSubmit|saveLead|addRecord" index.html 2>/dev/null) || FORM_COUNT=0
 [ "$FORM_COUNT" -gt 0 ] \
