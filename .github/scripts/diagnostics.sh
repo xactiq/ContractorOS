@@ -157,7 +157,7 @@ nl
 
 sec "6. UI Integrity"
 append "## 6. UI Component Integrity"; nl
-ONCLICK_COUNT=$(grep -c "onClick=" index.html 2>/dev/null) || ONCLICK_COUNT=0
+ONCLICK_COUNT=$(grep -cE "onClick[:=]|\{onClick\}" index.html 2>/dev/null) || ONCLICK_COUNT=0
 append "- **onClick handlers:** $ONCLICK_COUNT"
 FORM_COUNT=$(grep -cE "const save\s*=|onSubmit|handleSubmit|saveLead|addRecord" index.html 2>/dev/null) || FORM_COUNT=0
 [ "$FORM_COUNT" -gt 0 ] \
