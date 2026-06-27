@@ -88,7 +88,7 @@ const fmt$= n => '$' + Math.round(Number(n)||0).toLocaleString();
 const dlCSV = (name, rows, cols, lk={}) => {
   const hdr  = cols.map(c=>c.l).join(',');
   const body = rows.map(r => cols.map(c => {
-    let v = c.fn ? c.fn(r,lk) : String(r[c.k]||'');
+    let v = c.fn ? c.fn(r,lk) : String(r[c.k]??'');
     v = v.replace(/"/g,'""');
     return /[,"\n]/.test(v) ? `"${v}"` : v;
   }).join(','));
@@ -131,14 +131,14 @@ function Metric({label,value,muted}) {
     h('div',{style:{fontSize:'20px',fontWeight:'500',fontFamily:'var(--mono)',color:muted?'var(--text3)':'var(--text)'}},value)
   );
 }
-function Fld({label,as,options,...p}) {
+function Fld({label,as,options,mw,...p}) {
   const inp = as==='select'
     ? h('select',{value:p.value,onChange:p.onChange},
         (options||[]).map(o=>{const v=typeof o==='string'?o:o.value,l=typeof o==='string'?o:o.label;return h('option',{key:v,value:v},l);}))
     : as==='ta'
     ? h('textarea',{rows:2,...p})
     : h('input',{type:p.type||'text',...p});
-  return h('div',{className:'fld',style:{minWidth:p.mw||'120px'}}, label&&h('label',null,label), inp);
+  return h('div',{className:'fld',style:{minWidth:mw||'120px'}}, label&&h('label',null,label), inp);
 }
 function XBtn({onClick}){return h('button',{onClick,style:{color:'var(--text3)',padding:'4px',border:'none',background:'none'}},h('i',{className:'ti ti-x','aria-hidden':'true',style:{fontSize:'14px'}}));}
 function ExpBtn({onClick}){return h('button',{onClick,style:{fontSize:'11px',color:'var(--text2)',display:'flex',alignItems:'center',gap:'4px'}},h('i',{className:'ti ti-download','aria-hidden':'true',style:{fontSize:'13px'}}),' CSV');}
@@ -261,7 +261,7 @@ function Clients({data,ops}) {
   const f = k => ev => setForm(p=>({...p,[k]:ev.target.value}));
   const filtered = clients.filter(c=>!search||[c.name,c.phone,c.email,c.address].some(v=>v?.toLowerCase().includes(search.toLowerCase())));
   const save = async () => { if(!form.name.trim()) return; await ops.ins('clients',form); setForm({name:'',phone:'',email:'',address:'',type:'Residential',stage:'Lead',notes:''}); setAdding(false); };
-  const cyc  = cl => { const i=CSTG.indexOf(cl.stage); ops.upd('clients',cl.id,{stage:CSTG[(i+1)%CSTG.length]}); };
+  const cyc  = cl => { const i=CSTG.indexOf(cl.stage); if(i<CSTG.length-1) ops.upd('clients',cl.id,{stage:CSTG[i+1]}); };
   const exp  = () => dlCSV('clients',clients,[{k:'name',l:'Name'},{k:'phone',l:'Phone'},{k:'email',l:'Email'},{k:'address',l:'Address'},{k:'type',l:'Type'},{k:'stage',l:'Stage'},{k:'notes',l:'Notes'},{k:'created_at',l:'Date'}]);
   return h('div',null,
     h('div',{className:'fb'},
@@ -316,7 +316,7 @@ function Jobs({data,ops}) {
   const filtered = jobs.filter(j=>filt==='All'||j.status===filt);
   const cOpts = [{value:'',label:'— No client —'},...clients.map(c=>({value:c.id,label:c.name}))];
   const save  = async () => { if(!form.title.trim()) return; await ops.ins('jobs',form); setForm({client_id:'',title:'',type:'Roofing',status:'Pending',value:'',start_date:'',notes:''}); setAdding(false); };
-  const cyc   = j => { const i=JSTATS.indexOf(j.status); ops.upd('jobs',j.id,{status:JSTATS[(i+1)%JSTATS.length]}); };
+  const cyc   = j => { const i=JSTATS.indexOf(j.status); if(i<JSTATS.length-1) ops.upd('jobs',j.id,{status:JSTATS[i+1]}); };
   const exp   = () => dlCSV('jobs',jobs,[{k:'title',l:'Title'},{k:'client_id',l:'Client',fn:(r,lk)=>lk.find(c=>c.id===r.client_id)?.name||''},{k:'type',l:'Type'},{k:'status',l:'Status'},{k:'value',l:'Value'},{k:'start_date',l:'Start'},{k:'notes',l:'Notes'},{k:'created_at',l:'Date'}],clients);
   return h('div',null,
     h('div',{className:'fb'},
@@ -473,7 +473,7 @@ function Docs({data,ops}) {
         h('i',{className:'ti ti-file','aria-hidden':'true',style:{fontSize:'16px',color:'var(--text3)',flexShrink:0}}),
         h('div',{style:{flex:1,minWidth:0}},
           h('div',{style:{fontSize:'13px',fontWeight:'500'}},
-            d.url ? h('a',{href:d.url,target:'_blank',rel:'noopener'},d.title) : d.title
+            d.url && /^https?:\/\//i.test(d.url) ? h('a',{href:d.url,target:'_blank',rel:'noopener'},d.title) : d.title
           ),
           h('div',{style:{fontSize:'11px',color:'var(--text2)'}},[cl?.name,job?.title,d.created_at?.slice(0,10)].filter(Boolean).join(' · '))
         ),
@@ -506,7 +506,9 @@ function App() {
         db.from('supplements').select('*').order('created_at',{ascending:false}),
         db.from('docs').select('*').order('created_at',{ascending:false}),
       ]);
-      if(c.error) throw c.error;
+      const results = [c,j,e,s,d];
+      const failed = results.find(r => r.error);
+      if(failed) throw failed.error;
       setData({clients:c.data||[],jobs:j.data||[],estimates:e.data||[],supplements:s.data||[],docs:d.data||[]});
     } catch(e) {
       setErr(e.message||'Could not connect to Supabase. Check your URL and key.');
@@ -516,9 +518,9 @@ function App() {
 
   useEffect(() => { loadAll(); }, []);
 
-  const ins = async (table, record) => { await db.from(table).insert(record); await loadAll(); };
-  const upd = async (table, id, changes) => { await db.from(table).update(changes).eq('id',id); await loadAll(); };
-  const del = async (table, id) => { await db.from(table).delete().eq('id',id); await loadAll(); };
+  const ins = async (table, record) => { const {error} = await db.from(table).insert(record); if(error) { alert('Save failed: '+error.message); return; } await loadAll(); };
+  const upd = async (table, id, changes) => { const {error} = await db.from(table).update(changes).eq('id',id); if(error) { alert('Update failed: '+error.message); return; } await loadAll(); };
+  const del = async (table, id) => { if(!confirm('Delete this record? This cannot be undone.')) return; const {error} = await db.from(table).delete().eq('id',id); if(error) { alert('Delete failed: '+error.message); return; } await loadAll(); };
   const ops = {ins, upd, del};
 
   if (loading) return h('div',{className:'loader'},h('i',{className:'ti ti-loader-2','aria-hidden':'true',style:{fontSize:'18px'}}),'Loading...');
@@ -544,7 +546,7 @@ function App() {
   );
 }
 
-ReactDOM.render(h(App), document.getElementById('root'));
+ReactDOM.createRoot(document.getElementById('root')).render(h(App));
 </script>
 </body>
 </html>
