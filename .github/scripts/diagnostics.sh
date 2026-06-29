@@ -86,9 +86,15 @@ else
     nl; append "### Database Growth Tracking"; nl
     append "| Table | Record Count |"; append "|---|---|"
     for TABLE in clients jobs estimates supplements docs; do
-        COUNT=$(curl -s --max-time 15 "${SUPA_URL}/rest/v1/${TABLE}?select=count" \
+        RESP=$(curl -s --max-time 15 "${SUPA_URL}/rest/v1/${TABLE}?select=id" \
             -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" -H "Prefer: count=exact" \
-            -I 2>/dev/null | grep -i "content-range" | grep -oP '\d+/\d+' | cut -d/ -f2 || echo "N/A")
+            -D - -o /dev/null 2>/dev/null)
+        COUNT=$(echo "$RESP" | grep -i "content-range" | grep -oP '/\K\d+' || echo "")
+        if [ -z "$COUNT" ]; then
+            COUNT=$(curl -s --max-time 15 "${SUPA_URL}/rest/v1/${TABLE}?select=id" \
+                -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" 2>/dev/null \
+                | python3 -c "import sys,json; print(len(json.load(sys.stdin)))" 2>/dev/null || echo "N/A")
+        fi
         pass "Table $TABLE: $COUNT records"; append "| \`$TABLE\` | $COUNT |"
     done
 fi

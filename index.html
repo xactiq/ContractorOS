@@ -65,7 +65,7 @@ a{color:var(--ic)}
 .loader{display:flex;align-items:center;justify-content:center;height:50vh;color:var(--text2);font-size:13px;gap:8px}
 .errbox{background:var(--db);color:var(--dc);border-radius:var(--r);padding:1rem;margin:1rem}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem}
-@media(max-width:600px){.two-col{grid-template-columns:1fr}}
+@media(max-width:600px){.two-col{grid-template-columns:1fr}.pipeline-grid{grid-template-columns:1fr!important;gap:12px!important}}
 </style>
 </head>
 <body>
@@ -83,6 +83,7 @@ const {useState, useEffect} = React;
 const h   = React.createElement;
 const tod = () => new Date().toISOString().slice(0,10);
 const fmt$= n => '$' + Math.round(Number(n)||0).toLocaleString();
+const numOrNull = v => v===''||v==null ? null : Number(v);
 
 /* ── CSV export ── */
 const dlCSV = (name, rows, cols, lk={}) => {
@@ -218,7 +219,7 @@ function Pipeline({data,ops}) {
   };
   return h('div',null,
     h('div',{className:'metrics'},cols.map(col=>h(Metric,{key:col.stage,label:col.stage,value:col.items.length,muted:col.items.length===0}))),
-    h('div',{style:{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'8px'}},
+    h('div',{className:'pipeline-grid',style:{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'8px'}},
       cols.map(col=>h('div',{key:col.stage,className:'kcol'},
         h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}},
           h('span',{style:{fontSize:'10px',fontWeight:'500',color:SCOL[col.stage],textTransform:'uppercase',letterSpacing:'.04em',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},col.stage),
@@ -315,7 +316,7 @@ function Jobs({data,ops}) {
   const f = k => ev => setForm(p=>({...p,[k]:ev.target.value}));
   const filtered = jobs.filter(j=>filt==='All'||j.status===filt);
   const cOpts = [{value:'',label:'— No client —'},...clients.map(c=>({value:c.id,label:c.name}))];
-  const save  = async () => { if(!form.title.trim()) return; await ops.ins('jobs',form); setForm({client_id:'',title:'',type:'Roofing',status:'Pending',value:'',start_date:'',notes:''}); setAdding(false); };
+  const save  = async () => { if(!form.title.trim()) return; await ops.ins('jobs',{...form,value:numOrNull(form.value),client_id:form.client_id||null,start_date:form.start_date||null}); setForm({client_id:'',title:'',type:'Roofing',status:'Pending',value:'',start_date:'',notes:''}); setAdding(false); };
   const cyc   = j => { const i=JSTATS.indexOf(j.status); ops.upd('jobs',j.id,{status:JSTATS[(i+1)%JSTATS.length]}); };
   const exp   = () => dlCSV('jobs',jobs,[{k:'title',l:'Title'},{k:'client_id',l:'Client',fn:(r,lk)=>lk.find(c=>c.id===r.client_id)?.name||''},{k:'type',l:'Type'},{k:'status',l:'Status'},{k:'value',l:'Value'},{k:'start_date',l:'Start'},{k:'notes',l:'Notes'},{k:'created_at',l:'Date'}],clients);
   return h('div',null,
@@ -360,7 +361,7 @@ function Estimates({data,ops}) {
   const filtered = estimates.filter(x=>filt==='All'||x.status===filt);
   const total    = filtered.reduce((s,x)=>s+Number(x.value||0),0);
   const cOpts    = [{value:'',label:'— No client —'},...clients.map(c=>({value:c.id,label:c.name}))];
-  const save  = async () => { if(!form.title.trim()) return; await ops.ins('estimates',form); setForm({client_id:'',title:'',value:'',status:'Draft',notes:''}); setAdding(false); };
+  const save  = async () => { if(!form.title.trim()) return; await ops.ins('estimates',{...form,value:numOrNull(form.value),client_id:form.client_id||null}); setForm({client_id:'',title:'',value:'',status:'Draft',notes:''}); setAdding(false); };
   const adv   = x => { const i=ESTATS.indexOf(x.status); if(i<ESTATS.length-1) ops.upd('estimates',x.id,{status:ESTATS[i+1]}); };
   const exp   = () => dlCSV('estimates',estimates,[{k:'title',l:'Title'},{k:'client_id',l:'Client',fn:(r,lk)=>lk.find(c=>c.id===r.client_id)?.name||''},{k:'value',l:'Value'},{k:'status',l:'Status'},{k:'notes',l:'Notes'},{k:'created_at',l:'Date'}],clients);
   return h('div',null,
@@ -406,7 +407,7 @@ function Supplements({data,ops}) {
   const appd  = supplements.filter(s=>s.status==='Approved').reduce((t,s)=>t+Number(s.supp_amount||0),0);
   const infl  = supplements.filter(s=>['Submitted','In Review'].includes(s.status)).reduce((t,s)=>t+Number(s.supp_amount||0),0);
   const cOpts = [{value:'',label:'— No client —'},...clients.map(c=>({value:c.id,label:c.name}))];
-  const save  = async () => { if(!form.carrier.trim()&&!form.claim_num.trim()) return; await ops.ins('supplements',form); setForm({client_id:'',carrier:'',claim_num:'',xacti_amount:'',supp_amount:'',status:'Pending',notes:''}); setAdding(false); };
+  const save  = async () => { if(!form.carrier.trim()&&!form.claim_num.trim()) return; await ops.ins('supplements',{...form,xacti_amount:numOrNull(form.xacti_amount),supp_amount:numOrNull(form.supp_amount),client_id:form.client_id||null}); setForm({client_id:'',carrier:'',claim_num:'',xacti_amount:'',supp_amount:'',status:'Pending',notes:''}); setAdding(false); };
   const adv   = s => { const i=SSTATS.indexOf(s.status); if(i<SSTATS.length-1) ops.upd('supplements',s.id,{status:SSTATS[i+1]}); };
   const exp   = () => dlCSV('supplements',supplements,[{k:'carrier',l:'Carrier'},{k:'claim_num',l:'Claim #'},{k:'client_id',l:'Client',fn:(r,lk)=>lk.find(c=>c.id===r.client_id)?.name||''},{k:'xacti_amount',l:'Xactimate'},{k:'supp_amount',l:'Supplement'},{k:'status',l:'Status'},{k:'notes',l:'Notes'},{k:'created_at',l:'Date'}],clients);
   return h('div',null,
@@ -506,7 +507,8 @@ function App() {
         db.from('supplements').select('*').order('created_at',{ascending:false}),
         db.from('docs').select('*').order('created_at',{ascending:false}),
       ]);
-      if(c.error) throw c.error;
+      const firstErr = [c,j,e,s,d].find(r=>r.error);
+      if(firstErr) throw firstErr.error;
       setData({clients:c.data||[],jobs:j.data||[],estimates:e.data||[],supplements:s.data||[],docs:d.data||[]});
     } catch(e) {
       setErr(e.message||'Could not connect to Supabase. Check your URL and key.');
@@ -516,9 +518,9 @@ function App() {
 
   useEffect(() => { loadAll(); }, []);
 
-  const ins = async (table, record) => { await db.from(table).insert(record); await loadAll(); };
-  const upd = async (table, id, changes) => { await db.from(table).update(changes).eq('id',id); await loadAll(); };
-  const del = async (table, id) => { await db.from(table).delete().eq('id',id); await loadAll(); };
+  const ins = async (table, record) => { const {error} = await db.from(table).insert(record); if(error){alert('Save failed: '+error.message);return;} await loadAll(); };
+  const upd = async (table, id, changes) => { const {error} = await db.from(table).update(changes).eq('id',id); if(error){alert('Update failed: '+error.message);return;} await loadAll(); };
+  const del = async (table, id) => { if(!confirm('Delete this record?')) return; const {error} = await db.from(table).delete().eq('id',id); if(error){alert('Delete failed: '+error.message);return;} await loadAll(); };
   const ops = {ins, upd, del};
 
   if (loading) return h('div',{className:'loader'},h('i',{className:'ti ti-loader-2','aria-hidden':'true',style:{fontSize:'18px'}}),'Loading...');
