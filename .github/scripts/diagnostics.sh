@@ -77,20 +77,34 @@ if [ -z "$SUPA_URL" ]; then
     warn "Could not extract Supabase URL"; append "- **Config:** ⚠️ Supabase URL not found in index.html"
 else
     append "- **Project URL:** \`$SUPA_URL\`"
-    SUPA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${SUPA_URL}/rest/v1/" -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" 2>/dev/null || echo "000")
-    if [[ "$SUPA_STATUS" =~ ^2 ]] || [ "$SUPA_STATUS" = "404" ]; then
+    SUPA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${SUPA_URL}/rest/v1/clients?select=id&limit=1" -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" 2>/dev/null || echo "000")
+    if [[ "$SUPA_STATUS" =~ ^2 ]]; then
         pass "Supabase reachable (HTTP $SUPA_STATUS)"; append "- **REST API:** ✅ Reachable"
-    elif [ "$SUPA_STATUS" = "401" ]; then
-        warn "Supabase REST: HTTP 401 — anon key rejected; verify the API key is active in Supabase dashboard"; append "- **REST API:** ⚠️ HTTP 401 (auth issue — not critical)"
     else fail "Supabase HTTP $SUPA_STATUS"; append "- **REST API:** ❌ HTTP $SUPA_STATUS"; fi
     nl; append "### Database Growth Tracking"; nl
     append "| Table | Record Count |"; append "|---|---|"
     for TABLE in clients jobs estimates supplements docs; do
         COUNT=$(curl -s --max-time 15 "${SUPA_URL}/rest/v1/${TABLE}?select=count" \
             -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" -H "Prefer: count=exact" \
-            -I 2>/dev/null | grep -i "content-range" | grep -oP '\d+/\d+' | cut -d/ -f2 || echo "N/A")
+            -D - -o /dev/null 2>/dev/null | grep -i "^content-range:" | tr -d '\r' | cut -d/ -f2 | tr -d ' ')
+        [ -z "$COUNT" ] && COUNT="N/A"
         pass "Table $TABLE: $COUNT records"; append "| \`$TABLE\` | $COUNT |"
     done
+    nl; append "### Write-Path Check (anon key insert capability)"; nl
+    WRITE_MARKER="__diag_write_probe_$$"
+    WRITE_RESP=$(curl -s -w '\n%{http_code}' --max-time 15 -X POST "${SUPA_URL}/rest/v1/clients" \
+        -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" \
+        -H "Content-Type: application/json" -H "Prefer: return=representation" \
+        -d "{\"name\":\"${WRITE_MARKER}\"}" 2>/dev/null || echo -e "\n000")
+    WRITE_CODE=$(echo "$WRITE_RESP" | tail -1)
+    if [[ "$WRITE_CODE" =~ ^2 ]]; then
+        pass "Anon key can write (test insert HTTP $WRITE_CODE)"; append "- **Write Path:** ✅ Anon key can INSERT (verified, test row removed)"
+        curl -s -o /dev/null --max-time 15 -X DELETE "${SUPA_URL}/rest/v1/clients?name=eq.${WRITE_MARKER}" -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" 2>/dev/null
+    else
+        fail "Anon key CANNOT write (test insert HTTP $WRITE_CODE) — every Save button in the app will silently fail"
+        append "- **Write Path:** ❌ CRITICAL — anon key insert rejected (HTTP $WRITE_CODE). No client/job/estimate/supplement/doc can be saved from the live app."
+        MAJOR_CHANGES="${MAJOR_CHANGES}\n- **🚨 WRITES BLOCKED:** anon key cannot INSERT into \`clients\` (HTTP $WRITE_CODE). Check Supabase RLS policies — schema.sql expects RLS disabled, but the live project may have RLS enabled with no write policy. Every Save/Add button in the app is silently failing."
+    fi
 fi
 nl
 
