@@ -77,18 +77,25 @@ if [ -z "$SUPA_URL" ]; then
     warn "Could not extract Supabase URL"; append "- **Config:** ⚠️ Supabase URL not found in index.html"
 else
     append "- **Project URL:** \`$SUPA_URL\`"
-    SUPA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${SUPA_URL}/rest/v1/" -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" 2>/dev/null || echo "000")
-    if [[ "$SUPA_STATUS" =~ ^2 ]] || [ "$SUPA_STATUS" = "404" ]; then
+    # Query a real table instead of the OpenAPI root — anon keys are restricted
+    # from /rest/v1/ by design in current Supabase, which produced a permanent
+    # false-positive 401 on every run regardless of whether the key was valid.
+    SUPA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${SUPA_URL}/rest/v1/clients?select=id&limit=1" -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" 2>/dev/null || echo "000")
+    if [[ "$SUPA_STATUS" =~ ^2 ]]; then
         pass "Supabase reachable (HTTP $SUPA_STATUS)"; append "- **REST API:** ✅ Reachable"
     elif [ "$SUPA_STATUS" = "401" ]; then
-        warn "Supabase REST: HTTP 401 — anon key rejected; verify the API key is active in Supabase dashboard"; append "- **REST API:** ⚠️ HTTP 401 (auth issue — not critical)"
+        fail "Supabase REST: HTTP 401 — anon key rejected"; append "- **REST API:** ❌ HTTP 401 (anon key rejected)"
+        MAJOR_CHANGES="${MAJOR_CHANGES}\n- **Supabase auth failure:** anon key rejected on a real table query — check the key in Supabase dashboard vs index.html."
     else fail "Supabase HTTP $SUPA_STATUS"; append "- **REST API:** ❌ HTTP $SUPA_STATUS"; fi
     nl; append "### Database Growth Tracking"; nl
     append "| Table | Record Count |"; append "|---|---|"
     for TABLE in clients jobs estimates supplements docs; do
+        # PostgREST's exact-count Content-Range is "*/N" (no leading digits),
+        # so the previous \d+/\d+ pattern never matched and always fell to N/A.
         COUNT=$(curl -s --max-time 15 "${SUPA_URL}/rest/v1/${TABLE}?select=count" \
             -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" -H "Prefer: count=exact" \
-            -I 2>/dev/null | grep -i "content-range" | grep -oP '\d+/\d+' | cut -d/ -f2 || echo "N/A")
+            -I 2>/dev/null | grep -i "content-range" | grep -oP '(?<=/)\d+')
+        [ -z "$COUNT" ] && COUNT="N/A"
         pass "Table $TABLE: $COUNT records"; append "| \`$TABLE\` | $COUNT |"
     done
 fi
@@ -157,7 +164,7 @@ nl
 
 sec "6. UI Integrity"
 append "## 6. UI Component Integrity"; nl
-ONCLICK_COUNT=$(grep -c "onClick=" index.html 2>/dev/null) || ONCLICK_COUNT=0
+ONCLICK_COUNT=$(grep -coE "onClick[=:]" index.html 2>/dev/null) || ONCLICK_COUNT=0
 append "- **onClick handlers:** $ONCLICK_COUNT"
 FORM_COUNT=$(grep -cE "const save\s*=|onSubmit|handleSubmit|saveLead|addRecord" index.html 2>/dev/null) || FORM_COUNT=0
 [ "$FORM_COUNT" -gt 0 ] \
