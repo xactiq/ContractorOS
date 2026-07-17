@@ -77,19 +77,31 @@ if [ -z "$SUPA_URL" ]; then
     warn "Could not extract Supabase URL"; append "- **Config:** ⚠️ Supabase URL not found in index.html"
 else
     append "- **Project URL:** \`$SUPA_URL\`"
-    SUPA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${SUPA_URL}/rest/v1/" -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" 2>/dev/null || echo "000")
-    if [[ "$SUPA_STATUS" =~ ^2 ]] || [ "$SUPA_STATUS" = "404" ]; then
+    # NOTE: the bare /rest/v1/ root always 401s for the anon role (PostgREST reserves
+    # it for the OpenAPI spec) even when every table endpoint is healthy — probing a
+    # real table is the only signal that actually reflects API reachability.
+    SUPA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${SUPA_URL}/rest/v1/clients?limit=1" -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" 2>/dev/null || echo "000")
+    if [[ "$SUPA_STATUS" =~ ^2 ]]; then
         pass "Supabase reachable (HTTP $SUPA_STATUS)"; append "- **REST API:** ✅ Reachable"
     elif [ "$SUPA_STATUS" = "401" ]; then
-        warn "Supabase REST: HTTP 401 — anon key rejected; verify the API key is active in Supabase dashboard"; append "- **REST API:** ⚠️ HTTP 401 (auth issue — not critical)"
+        fail "Supabase REST: HTTP 401 — anon key rejected"; append "- **REST API:** ❌ HTTP 401 (anon key rejected — check the key in Supabase dashboard)"
     else fail "Supabase HTTP $SUPA_STATUS"; append "- **REST API:** ❌ HTTP $SUPA_STATUS"; fi
     nl; append "### Database Growth Tracking"; nl
-    append "| Table | Record Count |"; append "|---|---|"
+    append "| Table | Record Count (visible to anon key) |"; append "|---|---|"
     for TABLE in clients jobs estimates supplements docs; do
-        COUNT=$(curl -s --max-time 15 "${SUPA_URL}/rest/v1/${TABLE}?select=count" \
+        RANGE=$(curl -s --max-time 15 "${SUPA_URL}/rest/v1/${TABLE}?select=id" \
             -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" -H "Prefer: count=exact" \
-            -I 2>/dev/null | grep -i "content-range" | grep -oP '\d+/\d+' | cut -d/ -f2 || echo "N/A")
-        pass "Table $TABLE: $COUNT records"; append "| \`$TABLE\` | $COUNT |"
+            -I 2>/dev/null | grep -i "content-range" | tr -d '\r')
+        COUNT=$(echo "$RANGE" | grep -oP '\d+$')
+        if [ -z "$COUNT" ]; then
+            warn "Table $TABLE: could not read count"; append "| \`$TABLE\` | ⚠️ unknown |"
+        elif [ "$COUNT" = "0" ]; then
+            warn "Table $TABLE: 0 rows visible to anon key (RLS may be blocking reads)"
+            append "| \`$TABLE\` | 0 *(RLS may be blocking anon reads — see Security section)* |"
+            RECOMMENDATIONS="${RECOMMENDATIONS}\n- \`$TABLE\` returns 0 rows to the anon key; if the app reads data unauthenticated, confirm this is intentional RLS behavior and not a broken UI."
+        else
+            pass "Table $TABLE: $COUNT records"; append "| \`$TABLE\` | $COUNT |"
+        fi
     done
 fi
 nl
@@ -140,12 +152,15 @@ grep -qi "service_role" index.html 2>/dev/null \
          MAJOR_CHANGES="${MAJOR_CHANGES}\n- **🚨 SECURITY:** service_role key in index.html — remove immediately."; } \
     || { pass "No service_role in HTML"; append "- **Service Role Key:** ✅ Not exposed"; }
 if [ -f schema.sql ]; then
-    if   grep -qi "DISABLE ROW LEVEL SECURITY" schema.sql 2>/dev/null; then
-        warn "RLS disabled"; append "- **RLS:** ⚠️ Explicitly DISABLED — all data open to anon key"
-        RECOMMENDATIONS="${RECOMMENDATIONS}\n- Enable RLS before multi-tenant launch."
-    elif grep -qi "ENABLE ROW LEVEL SECURITY"  schema.sql 2>/dev/null; then
-        pass "RLS enabled"; append "- **RLS:** ✅ Enabled"
-    else warn "No RLS config"; append "- **RLS:** ⚠️ Not configured"; fi
+    # schema.sql is a local file checked into this repo — it reflects what was run
+    # against Supabase at some point in the past, NOT the live database's current
+    # RLS state. Treat a mismatch as a repo-hygiene warning, not a live security scan.
+    if grep -qi "DISABLE ROW LEVEL SECURITY" schema.sql 2>/dev/null; then
+        warn "schema.sql disables RLS"; append "- **RLS (schema.sql):** ⚠️ File explicitly DISABLES RLS — re-running it against production would remove protection. Verify the *live* database's RLS state directly (e.g. via Supabase advisors) rather than trusting this file."
+        RECOMMENDATIONS="${RECOMMENDATIONS}\n- schema.sql contains DISABLE ROW LEVEL SECURITY statements; if production RLS is actually enabled, update schema.sql to match so nobody re-runs it and disables live security by accident."
+    elif grep -qi "ENABLE ROW LEVEL SECURITY" schema.sql 2>/dev/null; then
+        pass "schema.sql enables RLS"; append "- **RLS (schema.sql):** ✅ File enables RLS"
+    else warn "No RLS statements in schema.sql"; append "- **RLS (schema.sql):** ⚠️ Not configured in file"; fi
 fi
 grep -qP "dangerouslySetInnerHTML|\.innerHTML\s*=" index.html 2>/dev/null \
     && { warn "innerHTML usage found"; append "- **XSS Risk:** ⚠️ innerHTML/dangerouslySetInnerHTML detected"; } \
