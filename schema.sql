@@ -58,9 +58,12 @@ CREATE TABLE docs (
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Personal use: disable RLS so anon key has full access
-ALTER TABLE clients    DISABLE ROW LEVEL SECURITY;
-ALTER TABLE jobs       DISABLE ROW LEVEL SECURITY;
-ALTER TABLE estimates  DISABLE ROW LEVEL SECURITY;
-ALTER TABLE supplements DISABLE ROW LEVEL SECURITY;
-ALTER TABLE docs       DISABLE ROW LEVEL SECURITY;
+-- Production has RLS enabled on all tables above (verified via Supabase advisors).
+-- Do NOT disable it here — re-running this file against production would strip
+-- row-level protection from live customer data. Define policies before granting
+-- anon access to any table; the anon key currently returns 0 rows on all of them.
+ALTER TABLE clients    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE jobs       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE estimates  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE supplements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE docs       ENABLE ROW LEVEL SECURITY;
