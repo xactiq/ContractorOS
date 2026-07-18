@@ -83,14 +83,22 @@ else
     elif [ "$SUPA_STATUS" = "401" ]; then
         warn "Supabase REST: HTTP 401 — anon key rejected; verify the API key is active in Supabase dashboard"; append "- **REST API:** ⚠️ HTTP 401 (auth issue — not critical)"
     else fail "Supabase HTTP $SUPA_STATUS"; append "- **REST API:** ❌ HTTP $SUPA_STATUS"; fi
-    nl; append "### Database Growth Tracking"; nl
+    nl; append "### Database Growth Tracking (as visible to the anon key)"; nl
     append "| Table | Record Count |"; append "|---|---|"
+    ZERO_TABLES=0; TABLE_TOTAL=0
     for TABLE in clients jobs estimates supplements docs; do
         COUNT=$(curl -s --max-time 15 "${SUPA_URL}/rest/v1/${TABLE}?select=count" \
             -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" -H "Prefer: count=exact" \
-            -I 2>/dev/null | grep -i "content-range" | grep -oP '\d+/\d+' | cut -d/ -f2 || echo "N/A")
+            -I 2>/dev/null | grep -i "content-range" | grep -oP '/\K\d+' || echo "N/A")
         pass "Table $TABLE: $COUNT records"; append "| \`$TABLE\` | $COUNT |"
+        TABLE_TOTAL=$((TABLE_TOTAL + 1))
+        [ "$COUNT" = "0" ] && ZERO_TABLES=$((ZERO_TABLES + 1))
     done
+    if [ "$ZERO_TABLES" -eq "$TABLE_TOTAL" ]; then
+        warn "All tables show 0 records via the anon key — likely RLS blocking read access, not empty tables"
+        append ""; append "> ⚠️ All tables report 0 rows through the anon key. If the app has real data, this usually means Row Level Security policies now require an authenticated/owner match that the anon key can't satisfy — verify live policy state in the Supabase dashboard rather than trusting this as \"no data.\""
+        RECOMMENDATIONS="${RECOMMENDATIONS}\n- Anon key reads 0 rows on every table; confirm whether RLS policies changed and now block anon access before assuming the database is empty."
+    fi
 fi
 nl
 
@@ -141,11 +149,12 @@ grep -qi "service_role" index.html 2>/dev/null \
     || { pass "No service_role in HTML"; append "- **Service Role Key:** ✅ Not exposed"; }
 if [ -f schema.sql ]; then
     if   grep -qi "DISABLE ROW LEVEL SECURITY" schema.sql 2>/dev/null; then
-        warn "RLS disabled"; append "- **RLS:** ⚠️ Explicitly DISABLED — all data open to anon key"
-        RECOMMENDATIONS="${RECOMMENDATIONS}\n- Enable RLS before multi-tenant launch."
+        warn "schema.sql requests RLS disabled (static file only — may not match live DB)"
+        append "- **RLS (per schema.sql):** ⚠️ Explicitly DISABLED — NOTE: this only reflects the checked-in file, not the live database. This script has no service-role access to confirm live policy state; see Section 3 above for a live-data signal."
+        RECOMMENDATIONS="${RECOMMENDATIONS}\n- schema.sql disables RLS, but confirm the live database matches — it may have been changed independently (see anon-key read check in Section 3)."
     elif grep -qi "ENABLE ROW LEVEL SECURITY"  schema.sql 2>/dev/null; then
-        pass "RLS enabled"; append "- **RLS:** ✅ Enabled"
-    else warn "No RLS config"; append "- **RLS:** ⚠️ Not configured"; fi
+        pass "RLS enabled per schema.sql"; append "- **RLS (per schema.sql):** ✅ Enabled"
+    else warn "No RLS config in schema.sql"; append "- **RLS (per schema.sql):** ⚠️ Not configured"; fi
 fi
 grep -qP "dangerouslySetInnerHTML|\.innerHTML\s*=" index.html 2>/dev/null \
     && { warn "innerHTML usage found"; append "- **XSS Risk:** ⚠️ innerHTML/dangerouslySetInnerHTML detected"; } \
@@ -157,7 +166,7 @@ nl
 
 sec "6. UI Integrity"
 append "## 6. UI Component Integrity"; nl
-ONCLICK_COUNT=$(grep -c "onClick=" index.html 2>/dev/null) || ONCLICK_COUNT=0
+ONCLICK_COUNT=$(grep -cE "onClick[:=]" index.html 2>/dev/null) || ONCLICK_COUNT=0
 append "- **onClick handlers:** $ONCLICK_COUNT"
 FORM_COUNT=$(grep -cE "const save\s*=|onSubmit|handleSubmit|saveLead|addRecord" index.html 2>/dev/null) || FORM_COUNT=0
 [ "$FORM_COUNT" -gt 0 ] \
