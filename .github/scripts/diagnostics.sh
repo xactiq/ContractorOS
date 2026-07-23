@@ -77,19 +77,26 @@ if [ -z "$SUPA_URL" ]; then
     warn "Could not extract Supabase URL"; append "- **Config:** ⚠️ Supabase URL not found in index.html"
 else
     append "- **Project URL:** \`$SUPA_URL\`"
-    SUPA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${SUPA_URL}/rest/v1/" -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" 2>/dev/null || echo "000")
-    if [[ "$SUPA_STATUS" =~ ^2 ]] || [ "$SUPA_STATUS" = "404" ]; then
+    # NOTE: the bare /rest/v1/ root path returns 401 from PostgREST by design
+    # (anon role has no grant on schema introspection) even when the key is
+    # perfectly valid. Probe a real table endpoint instead so this check
+    # reflects actual key/connectivity health, not PostgREST's root-path quirk.
+    SUPA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${SUPA_URL}/rest/v1/changelog?select=id&limit=1" -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" 2>/dev/null || echo "000")
+    if [[ "$SUPA_STATUS" =~ ^2 ]]; then
         pass "Supabase reachable (HTTP $SUPA_STATUS)"; append "- **REST API:** ✅ Reachable"
     elif [ "$SUPA_STATUS" = "401" ]; then
-        warn "Supabase REST: HTTP 401 — anon key rejected; verify the API key is active in Supabase dashboard"; append "- **REST API:** ⚠️ HTTP 401 (auth issue — not critical)"
+        fail "Supabase REST: HTTP 401 — anon key rejected; verify the API key is active in Supabase dashboard"; append "- **REST API:** ❌ HTTP 401 (anon key rejected)"
+        MAJOR_CHANGES="${MAJOR_CHANGES}\n- **Supabase auth failing:** anon key in index.html is being rejected by a real table query — the app will not load data. Verify/rotate the key."
     else fail "Supabase HTTP $SUPA_STATUS"; append "- **REST API:** ❌ HTTP $SUPA_STATUS"; fi
     nl; append "### Database Growth Tracking"; nl
+    append "> Counts reflect what the public anon key can see under Row Level Security — typically 0 for user-scoped tables by design. This is a coarse reachability signal, not a real growth metric; track actual growth via an authenticated/service-role query instead."; nl
     append "| Table | Record Count |"; append "|---|---|"
     for TABLE in clients jobs estimates supplements docs; do
         COUNT=$(curl -s --max-time 15 "${SUPA_URL}/rest/v1/${TABLE}?select=count" \
             -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" -H "Prefer: count=exact" \
-            -I 2>/dev/null | grep -i "content-range" | grep -oP '\d+/\d+' | cut -d/ -f2 || echo "N/A")
-        pass "Table $TABLE: $COUNT records"; append "| \`$TABLE\` | $COUNT |"
+            -I 2>/dev/null | grep -i "content-range" | sed -E 's#.*/([0-9]+).*#\1#' | tr -d '\r\n')
+        [ -z "$COUNT" ] && COUNT="N/A"
+        pass "Table $TABLE: $COUNT records (anon-visible)"; append "| \`$TABLE\` | $COUNT |"
     done
 fi
 nl
@@ -140,12 +147,16 @@ grep -qi "service_role" index.html 2>/dev/null \
          MAJOR_CHANGES="${MAJOR_CHANGES}\n- **🚨 SECURITY:** service_role key in index.html — remove immediately."; } \
     || { pass "No service_role in HTML"; append "- **Service Role Key:** ✅ Not exposed"; }
 if [ -f schema.sql ]; then
+    # schema.sql is a standalone prototype skeleton (clients/jobs/estimates/supplements/docs)
+    # and is NOT what's deployed to app.xactiq.net — the live Supabase project has its own,
+    # much larger schema. This check only reflects schema.sql itself, not production RLS status.
     if   grep -qi "DISABLE ROW LEVEL SECURITY" schema.sql 2>/dev/null; then
-        warn "RLS disabled"; append "- **RLS:** ⚠️ Explicitly DISABLED — all data open to anon key"
-        RECOMMENDATIONS="${RECOMMENDATIONS}\n- Enable RLS before multi-tenant launch."
+        warn "RLS disabled in schema.sql (prototype file only — does not reflect production)"
+        append "- **RLS (schema.sql prototype):** ⚠️ Explicitly DISABLED in this file. This file is not what's deployed to app.xactiq.net; it does not reflect production RLS status."
+        RECOMMENDATIONS="${RECOMMENDATIONS}\n- schema.sql (prototype skeleton) has RLS disabled — enable before using this file as the basis for any real deployment. Does not affect the live app.xactiq.net database."
     elif grep -qi "ENABLE ROW LEVEL SECURITY"  schema.sql 2>/dev/null; then
-        pass "RLS enabled"; append "- **RLS:** ✅ Enabled"
-    else warn "No RLS config"; append "- **RLS:** ⚠️ Not configured"; fi
+        pass "RLS enabled in schema.sql"; append "- **RLS (schema.sql prototype):** ✅ Enabled"
+    else warn "No RLS config in schema.sql"; append "- **RLS (schema.sql prototype):** ⚠️ Not configured"; fi
 fi
 grep -qP "dangerouslySetInnerHTML|\.innerHTML\s*=" index.html 2>/dev/null \
     && { warn "innerHTML usage found"; append "- **XSS Risk:** ⚠️ innerHTML/dangerouslySetInnerHTML detected"; } \
