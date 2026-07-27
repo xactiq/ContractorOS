@@ -77,19 +77,27 @@ if [ -z "$SUPA_URL" ]; then
     warn "Could not extract Supabase URL"; append "- **Config:** ⚠️ Supabase URL not found in index.html"
 else
     append "- **Project URL:** \`$SUPA_URL\`"
-    SUPA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${SUPA_URL}/rest/v1/" -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" 2>/dev/null || echo "000")
+    # NOTE: GET /rest/v1/ (bare root, no table) always 401s under PostgREST even with a
+    # valid anon key — it's not a real auth signal. Probe a real table instead.
+    SUPA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${SUPA_URL}/rest/v1/clients?select=id&limit=1" -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" 2>/dev/null || echo "000")
     if [[ "$SUPA_STATUS" =~ ^2 ]] || [ "$SUPA_STATUS" = "404" ]; then
         pass "Supabase reachable (HTTP $SUPA_STATUS)"; append "- **REST API:** ✅ Reachable"
     elif [ "$SUPA_STATUS" = "401" ]; then
-        warn "Supabase REST: HTTP 401 — anon key rejected; verify the API key is active in Supabase dashboard"; append "- **REST API:** ⚠️ HTTP 401 (auth issue — not critical)"
+        fail "Supabase REST: HTTP 401 — anon key rejected on a real table query"; append "- **REST API:** ❌ HTTP 401 (anon key rejected)"
+        MAJOR_CHANGES="${MAJOR_CHANGES}\n- **Supabase anon key rejected:** verify the key in index.html matches the active anon key in the Supabase dashboard."
     else fail "Supabase HTTP $SUPA_STATUS"; append "- **REST API:** ❌ HTTP $SUPA_STATUS"; fi
     nl; append "### Database Growth Tracking"; nl
-    append "| Table | Record Count |"; append "|---|---|"
+    append "> Counts below are as seen by the **anon key** and are subject to Row Level Security."
+    append "> With RLS enabled and scoped per-user/org (as it should be), anon-key counts will read as 0"
+    append "> even when real data exists — this is NOT a bug, it's correct tenant isolation."
+    append "> True cross-tenant growth requires a service-role query run server-side (e.g. a scheduled"
+    append "> Edge Function), never a key shipped to the browser."; nl
+    append "| Table | Anon-visible Count |"; append "|---|---|"
     for TABLE in clients jobs estimates supplements docs; do
         COUNT=$(curl -s --max-time 15 "${SUPA_URL}/rest/v1/${TABLE}?select=count" \
             -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" -H "Prefer: count=exact" \
-            -I 2>/dev/null | grep -i "content-range" | grep -oP '\d+/\d+' | cut -d/ -f2 || echo "N/A")
-        pass "Table $TABLE: $COUNT records"; append "| \`$TABLE\` | $COUNT |"
+            -I 2>/dev/null | grep -i "content-range" | grep -oP '(?<=/)\d+' || echo "N/A")
+        pass "Table $TABLE: $COUNT records (anon-visible)"; append "| \`$TABLE\` | $COUNT |"
     done
 fi
 nl
