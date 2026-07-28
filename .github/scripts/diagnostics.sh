@@ -140,12 +140,12 @@ grep -qi "service_role" index.html 2>/dev/null \
          MAJOR_CHANGES="${MAJOR_CHANGES}\n- **🚨 SECURITY:** service_role key in index.html — remove immediately."; } \
     || { pass "No service_role in HTML"; append "- **Service Role Key:** ✅ Not exposed"; }
 if [ -f schema.sql ]; then
+    append "- **Note:** the check below only greps the \`schema.sql\` file checked into this repo. It does not query the live database and will be wrong if production has since diverged from this file."
     if   grep -qi "DISABLE ROW LEVEL SECURITY" schema.sql 2>/dev/null; then
-        warn "RLS disabled"; append "- **RLS:** ⚠️ Explicitly DISABLED — all data open to anon key"
-        RECOMMENDATIONS="${RECOMMENDATIONS}\n- Enable RLS before multi-tenant launch."
+        warn "schema.sql disables RLS (repo doc only — verify against live DB before acting)"; append "- **schema.sql RLS statement:** ⚠️ DISABLE ROW LEVEL SECURITY — this is what the checked-in file says, not necessarily the live project's current state"
     elif grep -qi "ENABLE ROW LEVEL SECURITY"  schema.sql 2>/dev/null; then
-        pass "RLS enabled"; append "- **RLS:** ✅ Enabled"
-    else warn "No RLS config"; append "- **RLS:** ⚠️ Not configured"; fi
+        pass "schema.sql enables RLS"; append "- **schema.sql RLS statement:** ✅ ENABLE ROW LEVEL SECURITY"
+    else warn "No RLS config in schema.sql"; append "- **schema.sql RLS statement:** ⚠️ Not configured"; fi
 fi
 grep -qP "dangerouslySetInnerHTML|\.innerHTML\s*=" index.html 2>/dev/null \
     && { warn "innerHTML usage found"; append "- **XSS Risk:** ⚠️ innerHTML/dangerouslySetInnerHTML detected"; } \
