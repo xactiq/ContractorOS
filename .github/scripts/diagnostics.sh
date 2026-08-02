@@ -77,15 +77,18 @@ if [ -z "$SUPA_URL" ]; then
     warn "Could not extract Supabase URL"; append "- **Config:** ⚠️ Supabase URL not found in index.html"
 else
     append "- **Project URL:** \`$SUPA_URL\`"
-    SUPA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${SUPA_URL}/rest/v1/" -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" 2>/dev/null || echo "000")
-    if [[ "$SUPA_STATUS" =~ ^2 ]] || [ "$SUPA_STATUS" = "404" ]; then
-        pass "Supabase reachable (HTTP $SUPA_STATUS)"; append "- **REST API:** ✅ Reachable"
+    # Note: the bare /rest/v1/ root path 401s on PostgREST even with a valid anon key
+    # (it isn't a resource endpoint) — probe a real table instead so this reflects actual key validity.
+    SUPA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${SUPA_URL}/rest/v1/clients?select=id&limit=1" -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" 2>/dev/null || echo "000")
+    if [[ "$SUPA_STATUS" =~ ^2 ]]; then
+        pass "Supabase reachable (HTTP $SUPA_STATUS)"; append "- **REST API:** ✅ Reachable — anon key valid"
     elif [ "$SUPA_STATUS" = "401" ]; then
-        warn "Supabase REST: HTTP 401 — anon key rejected; verify the API key is active in Supabase dashboard"; append "- **REST API:** ⚠️ HTTP 401 (auth issue — not critical)"
+        fail "Supabase REST: HTTP 401 — anon key rejected"; append "- **REST API:** ❌ HTTP 401 — anon key rejected, verify it is active in Supabase dashboard"
+        MAJOR_CHANGES="${MAJOR_CHANGES}\n- **Supabase anon key rejected (HTTP 401 on a real table query):** app.xactiq.net cannot read/write data until this is fixed."
     else fail "Supabase HTTP $SUPA_STATUS"; append "- **REST API:** ❌ HTTP $SUPA_STATUS"; fi
     nl; append "### Database Growth Tracking"; nl
     append "| Table | Record Count |"; append "|---|---|"
-    for TABLE in clients jobs estimates supplements docs; do
+    for TABLE in clients jobs proposals supplements documents profiles org_members leads; do
         COUNT=$(curl -s --max-time 15 "${SUPA_URL}/rest/v1/${TABLE}?select=count" \
             -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" -H "Prefer: count=exact" \
             -I 2>/dev/null | grep -i "content-range" | grep -oP '\d+/\d+' | cut -d/ -f2 || echo "N/A")
@@ -140,12 +143,15 @@ grep -qi "service_role" index.html 2>/dev/null \
          MAJOR_CHANGES="${MAJOR_CHANGES}\n- **🚨 SECURITY:** service_role key in index.html — remove immediately."; } \
     || { pass "No service_role in HTML"; append "- **Service Role Key:** ✅ Not exposed"; }
 if [ -f schema.sql ]; then
+    # schema.sql is a static snapshot and may lag behind RLS policies applied live via
+    # migrations/dashboard — treat a miss here as inconclusive, not a finding, and rely on
+    # `mcp__Supabase__get_advisors` (security) for the authoritative live RLS status.
     if   grep -qi "DISABLE ROW LEVEL SECURITY" schema.sql 2>/dev/null; then
-        warn "RLS disabled"; append "- **RLS:** ⚠️ Explicitly DISABLED — all data open to anon key"
-        RECOMMENDATIONS="${RECOMMENDATIONS}\n- Enable RLS before multi-tenant launch."
+        fail "RLS explicitly disabled in schema.sql"; append "- **RLS (schema.sql):** ❌ Explicitly DISABLED"
+        MAJOR_CHANGES="${MAJOR_CHANGES}\n- **RLS disabled in schema.sql** — confirm live DB state via Supabase advisors before launch."
     elif grep -qi "ENABLE ROW LEVEL SECURITY"  schema.sql 2>/dev/null; then
-        pass "RLS enabled"; append "- **RLS:** ✅ Enabled"
-    else warn "No RLS config"; append "- **RLS:** ⚠️ Not configured"; fi
+        pass "RLS enabled (schema.sql)"; append "- **RLS (schema.sql):** ✅ Enabled"
+    else append "- **RLS (schema.sql):** ℹ️ Not declared in this file — not authoritative; verify live status via Supabase security advisors, not this static check"; fi
 fi
 grep -qP "dangerouslySetInnerHTML|\.innerHTML\s*=" index.html 2>/dev/null \
     && { warn "innerHTML usage found"; append "- **XSS Risk:** ⚠️ innerHTML/dangerouslySetInnerHTML detected"; } \

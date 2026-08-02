@@ -106,6 +106,21 @@ jobs:
               });
             }
 
+            // Auto-close prior days' diagnostic-report issues so they don't pile up
+            // indefinitely — only today's report needs to stay open for review.
+            for (const old of existing.data) {
+              if (old.title.includes(date)) continue;
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: old.number, state: 'closed', state_reason: 'not_planned',
+              });
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: old.number,
+                body: 'Superseded by a newer daily diagnostic report — auto-closed to avoid stale-issue buildup.',
+              });
+            }
+
       - name: Fail workflow on critical issues
         if: steps.run_diag.outcome == 'failure'
         run: |

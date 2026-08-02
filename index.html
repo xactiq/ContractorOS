@@ -507,6 +507,10 @@ function App() {
         db.from('docs').select('*').order('created_at',{ascending:false}),
       ]);
       if(c.error) throw c.error;
+      if(j.error) throw j.error;
+      if(e.error) throw e.error;
+      if(s.error) throw s.error;
+      if(d.error) throw d.error;
       setData({clients:c.data||[],jobs:j.data||[],estimates:e.data||[],supplements:s.data||[],docs:d.data||[]});
     } catch(e) {
       setErr(e.message||'Could not connect to Supabase. Check your URL and key.');
@@ -516,9 +520,9 @@ function App() {
 
   useEffect(() => { loadAll(); }, []);
 
-  const ins = async (table, record) => { await db.from(table).insert(record); await loadAll(); };
-  const upd = async (table, id, changes) => { await db.from(table).update(changes).eq('id',id); await loadAll(); };
-  const del = async (table, id) => { await db.from(table).delete().eq('id',id); await loadAll(); };
+  const ins = async (table, record) => { const {error} = await db.from(table).insert(record); if(error){alert('Save failed: '+error.message); return;} await loadAll(); };
+  const upd = async (table, id, changes) => { const {error} = await db.from(table).update(changes).eq('id',id); if(error){alert('Update failed: '+error.message); return;} await loadAll(); };
+  const del = async (table, id) => { const {error} = await db.from(table).delete().eq('id',id); if(error){alert('Delete failed: '+error.message); return;} await loadAll(); };
   const ops = {ins, upd, del};
 
   if (loading) return h('div',{className:'loader'},h('i',{className:'ti ti-loader-2','aria-hidden':'true',style:{fontSize:'18px'}}),'Loading...');
