@@ -77,18 +77,22 @@ if [ -z "$SUPA_URL" ]; then
     warn "Could not extract Supabase URL"; append "- **Config:** ⚠️ Supabase URL not found in index.html"
 else
     append "- **Project URL:** \`$SUPA_URL\`"
-    SUPA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${SUPA_URL}/rest/v1/" -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" 2>/dev/null || echo "000")
-    if [[ "$SUPA_STATUS" =~ ^2 ]] || [ "$SUPA_STATUS" = "404" ]; then
+    # NOTE: bare /rest/v1/ always 401s for an anon key (Supabase reserves it for
+    # service_role), so that's not a valid liveness check. Query a real table instead.
+    SUPA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${SUPA_URL}/rest/v1/clients?select=id&limit=1" -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" 2>/dev/null || echo "000")
+    if [[ "$SUPA_STATUS" =~ ^2 ]]; then
         pass "Supabase reachable (HTTP $SUPA_STATUS)"; append "- **REST API:** ✅ Reachable"
-    elif [ "$SUPA_STATUS" = "401" ]; then
-        warn "Supabase REST: HTTP 401 — anon key rejected; verify the API key is active in Supabase dashboard"; append "- **REST API:** ⚠️ HTTP 401 (auth issue — not critical)"
+    elif [ "$SUPA_STATUS" = "401" ] || [ "$SUPA_STATUS" = "403" ]; then
+        fail "Supabase REST: HTTP $SUPA_STATUS — anon key rejected on live table query"; append "- **REST API:** ❌ HTTP $SUPA_STATUS (anon key invalid/rejected)"
+        MAJOR_CHANGES="${MAJOR_CHANGES}\n- **Supabase auth failing:** anon key rejected (HTTP $SUPA_STATUS) on a real table query — the live app cannot read/write data. Verify the anon key in Supabase dashboard matches index.html."
     else fail "Supabase HTTP $SUPA_STATUS"; append "- **REST API:** ❌ HTTP $SUPA_STATUS"; fi
     nl; append "### Database Growth Tracking"; nl
     append "| Table | Record Count |"; append "|---|---|"
     for TABLE in clients jobs estimates supplements docs; do
         COUNT=$(curl -s --max-time 15 "${SUPA_URL}/rest/v1/${TABLE}?select=count" \
             -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" -H "Prefer: count=exact" \
-            -I 2>/dev/null | grep -i "content-range" | grep -oP '\d+/\d+' | cut -d/ -f2 || echo "N/A")
+            -I 2>/dev/null | tr -d '\r' | grep -i "^content-range:" | grep -oP '(?<=/)\d+$' || echo "N/A")
+        [ -z "$COUNT" ] && COUNT="N/A"
         pass "Table $TABLE: $COUNT records"; append "| \`$TABLE\` | $COUNT |"
     done
 fi
@@ -145,7 +149,12 @@ if [ -f schema.sql ]; then
         RECOMMENDATIONS="${RECOMMENDATIONS}\n- Enable RLS before multi-tenant launch."
     elif grep -qi "ENABLE ROW LEVEL SECURITY"  schema.sql 2>/dev/null; then
         pass "RLS enabled"; append "- **RLS:** ✅ Enabled"
-    else warn "No RLS config"; append "- **RLS:** ⚠️ Not configured"; fi
+    else
+        # schema.sql is a static snapshot — RLS may have been enabled later via
+        # dashboard/migrations that never got committed here. Don't count this as
+        # a warning off a file that can't see live database state; just note it.
+        append "- **RLS:** ℹ️ Not mentioned in schema.sql — verify live status in Supabase dashboard, not just this file"
+    fi
 fi
 grep -qP "dangerouslySetInnerHTML|\.innerHTML\s*=" index.html 2>/dev/null \
     && { warn "innerHTML usage found"; append "- **XSS Risk:** ⚠️ innerHTML/dangerouslySetInnerHTML detected"; } \
