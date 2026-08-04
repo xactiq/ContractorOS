@@ -77,20 +77,17 @@ if [ -z "$SUPA_URL" ]; then
     warn "Could not extract Supabase URL"; append "- **Config:** ⚠️ Supabase URL not found in index.html"
 else
     append "- **Project URL:** \`$SUPA_URL\`"
-    SUPA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${SUPA_URL}/rest/v1/" -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" 2>/dev/null || echo "000")
-    if [[ "$SUPA_STATUS" =~ ^2 ]] || [ "$SUPA_STATUS" = "404" ]; then
+    # NOTE: bare /rest/v1/ (the PostgREST OpenAPI spec) always 401s for anon
+    # keys by design — it's restricted to service_role. Probe a real table
+    # instead so this reflects actual app connectivity.
+    SUPA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${SUPA_URL}/rest/v1/clients?select=id&limit=1" -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" 2>/dev/null || echo "000")
+    if [[ "$SUPA_STATUS" =~ ^2 ]]; then
         pass "Supabase reachable (HTTP $SUPA_STATUS)"; append "- **REST API:** ✅ Reachable"
-    elif [ "$SUPA_STATUS" = "401" ]; then
-        warn "Supabase REST: HTTP 401 — anon key rejected; verify the API key is active in Supabase dashboard"; append "- **REST API:** ⚠️ HTTP 401 (auth issue — not critical)"
+    elif [ "$SUPA_STATUS" = "401" ] || [ "$SUPA_STATUS" = "403" ]; then
+        fail "Supabase REST: HTTP $SUPA_STATUS — anon key rejected; verify the API key is active in Supabase dashboard"; append "- **REST API:** ❌ HTTP $SUPA_STATUS (anon key rejected)"
     else fail "Supabase HTTP $SUPA_STATUS"; append "- **REST API:** ❌ HTTP $SUPA_STATUS"; fi
     nl; append "### Database Growth Tracking"; nl
-    append "| Table | Record Count |"; append "|---|---|"
-    for TABLE in clients jobs estimates supplements docs; do
-        COUNT=$(curl -s --max-time 15 "${SUPA_URL}/rest/v1/${TABLE}?select=count" \
-            -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" -H "Prefer: count=exact" \
-            -I 2>/dev/null | grep -i "content-range" | grep -oP '\d+/\d+' | cut -d/ -f2 || echo "N/A")
-        pass "Table $TABLE: $COUNT records"; append "| \`$TABLE\` | $COUNT |"
-    done
+    append "> Row counts are not visible here: RLS policies correctly scope every table to authenticated org members, so the public anon key sees 0 rows by design. This is expected/secure behavior, not a bug. Real growth numbers require an authenticated session or the Supabase dashboard/MCP."; nl
 fi
 nl
 
@@ -139,14 +136,13 @@ grep -qi "service_role" index.html 2>/dev/null \
     && { fail "service_role key in HTML!"; append "- **Service Role Key:** ❌ CRITICAL — exposed in client HTML"
          MAJOR_CHANGES="${MAJOR_CHANGES}\n- **🚨 SECURITY:** service_role key in index.html — remove immediately."; } \
     || { pass "No service_role in HTML"; append "- **Service Role Key:** ✅ Not exposed"; }
-if [ -f schema.sql ]; then
-    if   grep -qi "DISABLE ROW LEVEL SECURITY" schema.sql 2>/dev/null; then
-        warn "RLS disabled"; append "- **RLS:** ⚠️ Explicitly DISABLED — all data open to anon key"
-        RECOMMENDATIONS="${RECOMMENDATIONS}\n- Enable RLS before multi-tenant launch."
-    elif grep -qi "ENABLE ROW LEVEL SECURITY"  schema.sql 2>/dev/null; then
-        pass "RLS enabled"; append "- **RLS:** ✅ Enabled"
-    else warn "No RLS config"; append "- **RLS:** ⚠️ Not configured"; fi
-fi
+# NOTE: schema.sql is a legacy single-user bootstrap script and no longer
+# reflects the live database (which has grown to 24 tables with a
+# multi-tenant org/profile model). It is NOT a reliable signal for the
+# live project's RLS status — checking it here produced false alarms for
+# days. A public anon key has no way to query live RLS status directly;
+# verify via the Supabase dashboard/advisors or MCP instead.
+append "- **RLS:** ⏭️ Not checked here — \`schema.sql\` is a legacy artifact, not the live schema. Verify via Supabase advisors."
 grep -qP "dangerouslySetInnerHTML|\.innerHTML\s*=" index.html 2>/dev/null \
     && { warn "innerHTML usage found"; append "- **XSS Risk:** ⚠️ innerHTML/dangerouslySetInnerHTML detected"; } \
     || { pass "No innerHTML patterns"; append "- **XSS Risk:** ✅ Clean"; }
