@@ -50,3 +50,22 @@ Per `v1/REVIEW-NOTES.md`:
 - Do not over-engineer. Keep it sellable and repeatable.
 - Supplement speed is the killer feature — lead with that in any sales asset.
 - White-label first: branding, logo, company name must be swappable without breaking the engine.
+
+## ⚠️ Known issue: this repo has drifted from production (found 2026-08-09)
+`app.xactiq.net` and its Supabase project (`qjzaxgfwbevztzqlgbwp`) no longer match what's
+checked in here. The live app is a multi-tenant SaaS (Stripe subscriptions in `profiles`,
+`org_members`, `tasks`, `leads`, `feedback`, `changelog`, RLS enabled on every table) — not
+the single-tenant `index.html`/`schema.sql` prototype in this repo (hardcoded to "McEntire
+Construction", RLS disabled). The live schema has ~20 tables this repo has never seen.
+
+Consequence: `.github/workflows/daily-diagnostics.yml` has been diagnosing the *stale
+prototype* every morning, not the real product, so its RLS/growth-count checks are
+meaningless. That produced ~29 consecutive unmerged PRs (June 23 – Aug 8) all titled some
+variant of "fix false-positive warnings in daily diagnostics" and ~65 open
+`diagnostic-report` issues — none of it addresses a real problem, because the target file
+isn't what's deployed.
+
+**Do not open another "fix diagnostics false positive" PR.** The fix isn't in this repo —
+it's pointing diagnostics at the real production repo/schema, or retiring this workflow.
+That decision (and cleanup of the stale PRs/issues) needs Logan's sign-off; flag it, don't
+action it solo.
