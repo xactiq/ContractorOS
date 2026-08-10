@@ -88,7 +88,8 @@ else
     for TABLE in clients jobs estimates supplements docs; do
         COUNT=$(curl -s --max-time 15 "${SUPA_URL}/rest/v1/${TABLE}?select=count" \
             -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" -H "Prefer: count=exact" \
-            -I 2>/dev/null | grep -i "content-range" | grep -oP '\d+/\d+' | cut -d/ -f2 || echo "N/A")
+            -I 2>/dev/null | grep -i "content-range" | grep -oP '/\K\d+')
+        [ -z "$COUNT" ] && COUNT="N/A"
         pass "Table $TABLE: $COUNT records"; append "| \`$TABLE\` | $COUNT |"
     done
 fi
@@ -157,7 +158,7 @@ nl
 
 sec "6. UI Integrity"
 append "## 6. UI Component Integrity"; nl
-ONCLICK_COUNT=$(grep -c "onClick=" index.html 2>/dev/null) || ONCLICK_COUNT=0
+ONCLICK_COUNT=$(grep -cE "onClick[:=]" index.html 2>/dev/null) || ONCLICK_COUNT=0
 append "- **onClick handlers:** $ONCLICK_COUNT"
 FORM_COUNT=$(grep -cE "const save\s*=|onSubmit|handleSubmit|saveLead|addRecord" index.html 2>/dev/null) || FORM_COUNT=0
 [ "$FORM_COUNT" -gt 0 ] \
