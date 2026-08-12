@@ -120,7 +120,7 @@ const ST = {
 /* ── Shared UI bits ── */
 function Badge({s}) {
   const t = ST[s?.toLowerCase()] || ST.lead;
-  return h('span',{style:{background:t.b,color:t.c,fontSize:'11px',fontWeight:'500',padding:'2px 8px',borderRadius:'var(--r)',textTransform:'capitalize',whiteSpace:'nowrap',cursor:'pointer'}},s);
+  return h('span',{style:{background:t.b,color:t.c,fontSize:'11px',fontWeight:'500',padding:'2px 8px',borderRadius:'var(--r)',textTransform:'capitalize',whiteSpace:'nowrap'}},s);
 }
 function NBadge({l}) {
   return h('span',{style:{background:'var(--bg2)',color:'var(--text2)',fontSize:'11px',fontWeight:'500',padding:'2px 8px',borderRadius:'var(--r)',whiteSpace:'nowrap'}},l);
@@ -284,7 +284,7 @@ function Clients({data,ops}) {
           h('div',{style:{fontSize:'13px',fontWeight:'500'}},c.name),
           h('div',{style:{fontSize:'11px',color:'var(--text2)'}},c.phone||c.email||c.address||'—')
         ),
-        h('span',{onClick:ev=>{ev.stopPropagation();cyc(c);}},h(Badge,{s:c.stage})),
+        h('span',{onClick:ev=>{ev.stopPropagation();cyc(c);},style:{cursor:'pointer'}},h(Badge,{s:c.stage})),
         h('span',{style:{fontSize:'11px',color:'var(--text3)',marginRight:'4px'}},c.type),
         h('i',{className:`ti ti-chevron-${expanded===c.id?'up':'down'}`,style:{fontSize:'14px',color:'var(--text3)'},'aria-hidden':'true'})
       ),
@@ -338,7 +338,7 @@ function Jobs({data,ops}) {
           h('div',{style:{fontSize:'13px',fontWeight:'500',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},j.title),
           h('div',{style:{fontSize:'11px',color:'var(--text2)'}},(cl?.name||'No client')+' · '+j.type+(j.value?' · '+fmt$(j.value):'')+(j.start_date?' · '+j.start_date:''))
         ),
-        h('span',{onClick:()=>cyc(j),title:'Advance status'},h(Badge,{s:j.status})),
+        h('span',{onClick:()=>cyc(j),title:'Advance status',style:{cursor:'pointer'}},h(Badge,{s:j.status})),
         h(XBtn,{onClick:()=>ops.del('jobs',j.id)})
       );
     }),
@@ -383,7 +383,7 @@ function Estimates({data,ops}) {
           h('div',{style:{fontSize:'13px',fontWeight:'500',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},x.title),
           h('div',{style:{fontSize:'11px',color:'var(--text2)'}},(cl?.name||'No client')+' · '+fmt$(x.value)+(x.created_at?' · '+x.created_at.slice(0,10):''))
         ),
-        h('span',{onClick:()=>adv(x),title:'Advance status'},h(Badge,{s:x.status})),
+        h('span',{onClick:()=>adv(x),title:'Advance status',style:{cursor:'pointer'}},h(Badge,{s:x.status})),
         h(XBtn,{onClick:()=>ops.del('estimates',x.id)})
       );
     }),
@@ -430,7 +430,7 @@ function Supplements({data,ops}) {
           h('div',{style:{fontSize:'13px',fontWeight:'500',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},s.carrier+(s.claim_num?' · #'+s.claim_num:'')),
           h('div',{style:{fontSize:'11px',color:'var(--text2)'}},(cl?.name||'No client')+(s.xacti_amount?' · Xacti: '+fmt$(s.xacti_amount):'')+(s.supp_amount?' · Supp: '+fmt$(s.supp_amount):''))
         ),
-        h('span',{onClick:()=>adv(s),title:'Advance status'},h(Badge,{s:s.status})),
+        h('span',{onClick:()=>adv(s),title:'Advance status',style:{cursor:'pointer'}},h(Badge,{s:s.status})),
         h(XBtn,{onClick:()=>ops.del('supplements',s.id)})
       );
     }),
@@ -516,9 +516,9 @@ function App() {
 
   useEffect(() => { loadAll(); }, []);
 
-  const ins = async (table, record) => { await db.from(table).insert(record); await loadAll(); };
-  const upd = async (table, id, changes) => { await db.from(table).update(changes).eq('id',id); await loadAll(); };
-  const del = async (table, id) => { await db.from(table).delete().eq('id',id); await loadAll(); };
+  const ins = async (table, record) => { const {error} = await db.from(table).insert(record); if(error){alert(error.message);return;} await loadAll(); };
+  const upd = async (table, id, changes) => { const {error} = await db.from(table).update(changes).eq('id',id); if(error){alert(error.message);return;} await loadAll(); };
+  const del = async (table, id) => { const {error} = await db.from(table).delete().eq('id',id); if(error){alert(error.message);return;} await loadAll(); };
   const ops = {ins, upd, del};
 
   if (loading) return h('div',{className:'loader'},h('i',{className:'ti ti-loader-2','aria-hidden':'true',style:{fontSize:'18px'}}),'Loading...');
